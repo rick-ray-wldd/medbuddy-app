@@ -46,8 +46,39 @@ Carried into this repo under `docs/` at the start of the build.
 
 ### H0 — scaffold
 - `create-next-app` (Next 16.2.12, React 19, TS, Tailwind 4) + Vitest.
-- Chose a fresh public repo rather than reusing my private planning repo,
-  which contains a third party's personal contact details and notes from an
-  NDA-covered dinner.
+- Chose a fresh repo rather than reusing my private planning repo, which
+  contains a third party's personal contact details and notes from an
+  NDA-covered dinner. Kept private during the build to avoid leaking
+  something while tired; flipped to public at submission.
+- Test harness went in before any logic, because the brief requires an exact
+  test command reviewers will execute.
+
+**Broke / debugged — deployment URL was behind a login wall.**
+Deployed the scaffold in the first hour specifically to find deployment
+problems early rather than at hour 47. Checked the result the way a reviewer
+would, with an anonymous request rather than my own browser:
+
+```
+curl -s -o /dev/null -w "%{http_code}" https://medbuddy-kel6soeie-…vercel.app
+→ 302
+curl -sI … | grep location
+→ location: https://vercel.com/sso-api?url=…
+```
+
+Vercel Deployment Protection was redirecting anonymous visitors to SSO. Traced
+it by checking each alias separately and found the split: protection applies to
+the deployment-specific URL, while the production alias is public.
+
+```
+https://medbuddy-kel6soeie-…vercel.app   302  (protected)
+https://medbuddy-app.vercel.app          200  (public)
+```
+
+Fix: publish the production alias, never the deployment URL. Had I pasted the
+URL the deploy command printed into the submission, reviewers would have hit a
+login page.
+
+Also checked `medbuddy.vercel.app` — already taken by an unrelated project
+(`<title>React App</title>`), so the project name is `medbuddy-app`.
 
 <!-- append below, newest at the bottom -->

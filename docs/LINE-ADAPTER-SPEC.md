@@ -72,6 +72,9 @@ export type DeliveryTarget = {
   /** "elder" changes nothing about content — content is decided upstream —
    *  but it does gate which constraints the adapter must enforce (§6) */
   role: "elder" | "caregiver";
+  /** whose medications this message is about, and the name to show with it.
+   *  Required even when the recipient is that person. See §6.5. */
+  subject: { id: string; displayName: string };
 };
 
 export type DeliveryMessage = {
@@ -190,7 +193,20 @@ No identifiers, no payment, no personal details, ever — including in error pat
 "MedBuddy will never ask you for anything" has to stay literally true, because it
 is the line that makes an impersonation obvious.
 
-### 6.5 ✅ Fail loudly, never silently
+### 6.5 ✅ Every message names whose medications it is about
+
+A carer may be responsible for one parent or for twelve residents on a shift.
+Sending a finding about the wrong resident is the most likely serious error this
+product can make, and it becomes possible the moment one carer has two subjects.
+
+So `target.subject.displayName` must appear in what is delivered, including when
+the recipient is the subject. Never send a bare finding.
+
+Upstream already includes the name in `text`. Your obligation is to refuse when
+`subject` is missing — return `ok: false` rather than sending something
+unattributed.
+
+### 6.6 ✅ Fail loudly, never silently
 
 If delivery fails, return `ok: false`. Do not substitute a generic message. A
 missing medication explanation is safe; a wrong one is not.

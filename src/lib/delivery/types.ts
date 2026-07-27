@@ -19,6 +19,13 @@ export type DeliveryTarget = {
    * never receive a link.
    */
   role: DeliveryRole;
+  /**
+   * Whose medications this is about. Required even when the recipient is that
+   * person, because a carer may hold twelve residents across a shift and a
+   * finding attached to the wrong one is the worst error this product can
+   * make. Nothing renders or sends without a name attached.
+   */
+  subject: { id: string; displayName: string };
 };
 
 export type SpeechPayload = {

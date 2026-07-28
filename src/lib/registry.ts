@@ -16,6 +16,7 @@ import {
   type KnownMedicineIndex,
 } from "./narration/validate";
 import { InMemoryLogStore } from "./log/memory-store";
+import { BlobLogStore } from "./log/blob-store";
 import type { LogStore } from "./log/types";
 
 function read<T>(...segments: string[]): T {
@@ -70,10 +71,19 @@ export function getRegistry(): Registry {
       drugs: registers.drugs.drugs,
       healthFoods: registers.healthFoods.healthFoods,
     }),
-    // In memory for this build, and honest about it: a restart loses
-    // everything. Everything above it is written against LogStore, so
-    // replacing it with Postgres changes this line and nothing else.
-    logStore: new InMemoryLogStore(),
+    // Blob when configured, memory otherwise.
+    //
+    // The in-memory store is correct locally and wrong on Vercel: each
+    // invocation is its own process, so a snapshot written by /api/check was
+    // invisible to the summary page that reads it. That was found by walking
+    // the deployed URL rather than the laptop, and it made a required
+    // behaviour look built while being broken where reviewers would look.
+    //
+    // The line below is the whole cost of that change, which is what the
+    // LogStore interface was for.
+    logStore: process.env.BLOB_READ_WRITE_TOKEN
+      ? new BlobLogStore()
+      : new InMemoryLogStore(),
   };
 
   g[GLOBAL_KEY] = built;

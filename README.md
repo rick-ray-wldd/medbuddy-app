@@ -54,8 +54,16 @@ its output is asserted against that object in tests.
 Rule sets are committed JSON under `config/rules/`, not database rows, so every
 change to a medication-safety rule is diffable and reviewable.
 
-See [`src/lib/README.md`](./src/lib/README.md) for the module seams and
-[`NOTES.md`](./NOTES.md) for the build log.
+## Documents
+
+| | |
+| --- | --- |
+| [`docs/PRD.md`](./docs/PRD.md) | Where this comes from, why comprehension and handoffs are the wedge, the three workflows, what is not built |
+| [`docs/TDD.md`](./docs/TDD.md) | Grounding, chat architecture, logs, summaries, safety boundaries, escalation, evaluation, privacy, failure modes |
+| [`docs/DATA-MODEL.md`](./docs/DATA-MODEL.md) | Entities and the constraints they enforce |
+| [`docs/LINE-ADAPTER-SPEC.md`](./docs/LINE-ADAPTER-SPEC.md) | Spec a collaborator builds the LINE adapter from |
+| [`src/lib/README.md`](./src/lib/README.md) | Module seams |
+| [`NOTES.md`](./NOTES.md) | Build log — what broke, what the AI wrote and what I rejected |
 
 ## Status
 

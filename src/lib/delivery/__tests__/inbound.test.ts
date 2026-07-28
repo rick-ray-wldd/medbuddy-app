@@ -60,6 +60,20 @@ describe("handleInbound (elder question → narration reply)", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("LINE_USER_SUBJECT_MAP maps additional users; unlisted still silent", async () => {
+    vi.stubEnv("LINE_USER_SUBJECT_MAP", "U-friend:subj-father, U-other:subj-mother");
+    const { delivery, calls } = fakeDelivery();
+    await handleInbound(textMsg("普拿疼膜衣錠500毫克", "U-friend"), { delivery });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.target.subject.displayName).toBe("父親");
+
+    const second = fakeDelivery();
+    await handleInbound(textMsg("普拿疼", "U-not-in-map"), {
+      delivery: second.delivery,
+    });
+    expect(second.calls).toHaveLength(0);
+  });
+
   it("audio inbound → recorded, NOT answered (no STT wired; §6.6 over wrong answers)", async () => {
     const { delivery, calls } = fakeDelivery();
     await handleInbound(

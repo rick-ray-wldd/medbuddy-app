@@ -140,7 +140,12 @@ mark and never mentions a missed dose. Coverage is disclosed to him as well —
 *"there is one I could not identify"* is the system admitting its own limit, not
 asking him to admit anything.
 
-**Not built:** a conversational turn, and speech in or out. See §5.
+**Built:** hold-to-talk dictation and read-aloud, both on the device. A question
+box, because he speaks to ask — there is no control on his page for confirming
+or denying anything.
+
+**Not built:** an answer. The question is recorded, not routed back through
+grounding. See §5.
 
 ### 3.3 The clinician — a page, not a channel
 
@@ -220,7 +225,7 @@ It raises questions. It does not answer them.
 
 | Required by the brief | State |
 | --- | --- |
-| Voice-friendly **or highly accessible chat** interaction | **Partial.** Large type, Traditional Chinese, a single form, no jargon — but no conversational turn and no speech. This is the weakest of the four. |
+| Voice-friendly **or highly accessible chat** interaction | **Partial.** Speech in and out on the device, hold-to-talk in the gesture he already uses, a question box with nothing to tick, large type. Still not a conversation: the question is recorded, not answered. The weakest of the four. |
 | Explains purpose, timing and interactions with grounded data and clear limits | **Purpose and interactions built; timing is not.** The register's dosing text is not carried into the item model. This is still the strongest of the four. |
 | Structured medication / symptom / adherence log over time | **Built.** Snapshots on every check, observations in the carer's words, and the change between captures. In memory only — a restart loses it. |
 | Clinician- or caregiver-reviewable summary, escalating rather than deciding | **Built.** `/summary/[subjectId]` renders the page a family hands over; escalation is a two-value enumeration checked when rule sets load. |

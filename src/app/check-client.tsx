@@ -6,6 +6,7 @@ import { CONDITION_LABELS } from "@/lib/subjects";
 import type { Verdict } from "@/lib/verdict/types";
 import type { Narration, NarrationAudience } from "@/lib/narration/types";
 import type { ItemSource } from "@/lib/grounding/types";
+import { DictateButton, SpeakButton } from "./speech";
 
 const SOURCE_LABELS: Record<ItemSource, string> = {
   prescription: "處方",
@@ -119,7 +120,13 @@ export default function CheckClient({ subjects }: { subjects: SeededSubject[] })
           spellCheck={false}
           className="w-full rounded-lg border border-neutral-300 bg-transparent p-3 font-mono text-[15px] leading-relaxed outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-300"
         />
-        <div className="mt-3 flex items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {/* Speaking a medicine name is easier than typing one, and on a phone
+              it is much easier. Each utterance becomes its own line. */}
+          <DictateButton
+            label="按住唸出品名"
+            onText={(said) => setText((t) => (t ? `${t}\n${said}` : said))}
+          />
           <button
             onClick={() => run()}
             disabled={busy}
@@ -258,6 +265,8 @@ function Result({
         </div>
       </div>
 
+      {audience === "elder" && <AskBox />}
+
       <Coverage verdict={verdict} />
 
       <div className="space-y-3">
@@ -266,7 +275,40 @@ function Result({
         ))}
       </div>
 
+      {/* Reading it out is not a convenience here. The person this is written
+          for has presbyopia, and hearing it is how he takes it in. */}
+      <SpeakButton text={narration.segments.map((s) => s.text).join("。")} />
+
       <Provenance verdict={verdict} />
+    </section>
+  );
+}
+
+/**
+ * The one thing the older adult does.
+ *
+ * He asks. He is never asked to confirm or deny anything, so this is a
+ * question box and there is nothing here to tick.
+ */
+function AskBox() {
+  const [question, setQuestion] = useState("");
+  return (
+    <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <h3 className="mb-2 text-lg font-medium">想問什麼就問</h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <DictateButton label="按住問問題" onText={setQuestion} />
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="這顆白色的是幹嘛的?"
+          className="min-w-[14rem] flex-1 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-lg outline-none focus:border-neutral-900 dark:border-neutral-700"
+        />
+      </div>
+      {question && (
+        <p className="mt-2 text-neutral-600 dark:text-neutral-400">
+          聽到了:「{question}」—— 回答功能還沒接上,這一版先把問題留在畫面上。
+        </p>
+      )}
     </section>
   );
 }

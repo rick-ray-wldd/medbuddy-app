@@ -6,7 +6,7 @@ Run: `npm install && npm run dev` · Tests: `npm test` · All three: `npm run ve
 Live: https://medbuddy-app.vercel.app
 
 Next.js 16 (App Router) · TypeScript · Tailwind 4 · Vitest · deployed on Vercel.
-112 tests. No database, no authentication, no external API calls at request time.
+120 tests. No database, no authentication. No external call at all unless a caregiver opts into a cloned voice (§2, §8).
 
 ---
 
@@ -126,15 +126,47 @@ Reverse matching is now confined to health foods:
 
 ## 2. Voice and chat architecture
 
-**Current state: an accessible form, not a conversation.** Traditional Chinese,
-17px base type chosen for presbyopia rather than density, one field, one button,
-no jargon. There is no conversational turn and no speech in or out. Of the four
-required behaviours this is the weakest, and calling it otherwise would be the
-kind of overclaim §5 exists to catch.
+**Speech in and out, on the device.** `SpeechRecognition` (`zh-TW`) behind a
+hold-to-talk button — holding rather than toggling because it is the gesture
+already used to send a LINE voice message, so the person this was designed
+around performs it without being taught. `speechSynthesis` reads the narration
+back at 0.85 rate. Neither leaves the device, neither needs a key, both work
+offline, and a browser without them shows no button rather than a dead one.
+
+The elder view has a question box and nothing to tick. He speaks to ask; there
+is no control anywhere on that page for confirming or denying.
+
+**Still not a conversation.** The question box records what he asked and does
+not answer it — routing a question back through grounding is the next step, not
+a claim. Of the four required behaviours this remains the weakest.
 
 The register records dosing text, and **timing is not carried into the item
 model** — so "explains purpose, timing and interactions" is true of purpose and
 interactions, and not yet of timing.
+
+### A caregiver's own voice, and why it is opt-in
+
+A familiar voice is the difference between a technology-averse older adult
+opening this and ignoring it, so cloning is built: `FishVoiceProvider`
+registers a **private** model from samples the caregiver records, then
+synthesises against it. The request shapes follow the ones already in
+production in my own app.
+
+Three constraints are in the code rather than the prose. A profile cannot be
+created without a consent statement — there is no default to fall back on. The
+model is always `visibility: private`. And a provider response carrying no
+model id **fails** rather than storing a profile, because a voice that appears
+in the older adult's options and stays silent when he presses it is worse than
+no option.
+
+There is no route to a voice that is not the caregiver's own, and no outbound
+path at all. That is the whole design: cloned family voices are the live fraud
+vector against older adults, and a deceased person cannot consent.
+
+⚠️ **This is the one place health information leaves the process**, which is why
+it is opt-in per subject rather than the default, and why the browser voice —
+which sends nothing anywhere — is what runs without configuration. A test
+asserts that with no key set, no request is made at all.
 
 ### Why LINE, and why not a phone call
 
@@ -317,7 +349,7 @@ support.
 
 **No LLM-as-judge anywhere.** Every check is a deterministic comparison against
 the verdict, which is why the whole clinical layer can be asserted rather than
-reviewed. `npm test` runs 112 tests offline on a clean clone (after `npm install`).
+reviewed. `npm test` runs 120 tests offline on a clean clone (after `npm install`).
 
 Layered:
 
@@ -358,10 +390,16 @@ support.
 
 ## 8. Privacy
 
-**Nothing leaves the process.** No database, no accounts, no telemetry, no
-third-party calls at request time — the registers are files in the repository,
-so a medication list is never sent anywhere. The log is held in memory for the
-life of the process and is not written to disk.
+**By default, nothing leaves the process.** No database, no accounts, no
+telemetry — the registers are files in the repository, so a medication list is
+never sent anywhere, and the log is held in memory rather than written to disk.
+
+**One exception, and it is a choice a caregiver makes knowingly.** Turning on a
+cloned voice sends the text being spoken — a medication explanation — to Fish
+Audio. Nothing else in the product calls out. It is opt-in per subject, the
+browser voice is the default, and with no API key configured the code makes no
+request at all. Anyone deploying this owes their users that sentence in plain
+language, not in a privacy policy.
 
 **No real patient data is in this repository.** The three seeded people are
 constructed. The registers and the criteria are real, and deliberately so —
@@ -410,8 +448,9 @@ arrive is recoverable. A wrong one is not.
 1. **Persistence.** The missing requirement, and the keystone: it is what makes
    LINE and the web view one record instead of two products.
 2. **The clinician page.** The output the whole product is pointed at.
-3. **Speech in and out** in the browser — thirty lines, and it closes the
-   weakest of the four required behaviours.
+3. **Answer the question the elder asks** — the box records it; routing it back
+   through grounding is what makes the product conversational rather than
+   accessible.
 4. **Encode the rest of STOPP**, mechanical rather than conceptual, plus
    START — what is missing matters as much as what should not be there.
 5. **Measure the false-positive rate**, because permissive matching without that

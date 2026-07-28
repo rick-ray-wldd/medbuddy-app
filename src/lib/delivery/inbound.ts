@@ -124,6 +124,14 @@ export async function handleInbound(
     const outcome = await narrate(verdict, "elder", null, knownMedicines);
     const text = outcome.narration.segments.map((s) => s.text).join("\n");
 
+    // VOICE-DELIVERY-SPEC §5: empty narration → send NOTHING (no default).
+    if (!text.trim()) {
+      console.error("[medbuddy] empty narration — nothing sent", {
+        providerMessageId: msg.providerMessageId,
+      });
+      return;
+    }
+
     // Voice when an exact pre-rendered match exists; text-only otherwise.
     const { findPrerenderedSpeech } = await import("./prerendered-speech");
     const speech = await findPrerenderedSpeech(text);

@@ -85,6 +85,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   // VERBATIM join — the adapter must receive exactly what narration produced.
   const text = outcome.narration.segments.map((s) => s.text).join("\n");
 
+  // VOICE-DELIVERY-SPEC §5: empty narration → send NOTHING. No default text.
+  if (!text.trim()) {
+    return NextResponse.json(
+      { delivery: { ok: false, reason: "empty-narration", retryable: false } },
+      { status: 200 },
+    );
+  }
+
   // Optional speech: cloned caregiver voice via Fish (mp3 — the LINE adapter
   // accepts mp3 directly, verified drift in its README).
   let speech: DeliveryMessage["speech"];

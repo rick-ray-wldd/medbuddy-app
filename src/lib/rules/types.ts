@@ -36,7 +36,13 @@ export type Predicate =
   | { classAnyOf: string[] }
   | { conditionAnyOf: ConditionCode[] }
   | { allOf: Predicate[] }
-  | { duplicateClassAmong: string[] };
+  | { duplicateClassAmong: string[] }
+  /**
+   * Matches an item whose regulator-approved warning text mentions any of
+   * these terms. The evidence is the product's own approved 警語, quoted
+   * verbatim onto the finding — we are not paraphrasing a regulator.
+   */
+  | { officialWarningMentionsAnyOf: string[] };
 
 export type Rule = {
   id: string;
@@ -93,6 +99,16 @@ export type EvaluationItem = {
   nameZh?: string;
   /** Uppercased ingredient strings from the register. Empty means unresolved. */
   ingredients: string[];
+  /**
+   * For a licensed health food, the warning text the regulator approved for
+   * that specific product. Carried so a finding can quote it rather than
+   * describe it.
+   */
+  officialWarning?: string;
+  /** Which register the item came from, so a finding can attribute it. */
+  register?: "tfda_drug" | "tfda_health_food";
+  /** Permit number, so quoted regulator text is traceable to a licence. */
+  permit?: string;
 };
 
 export type Finding = {
@@ -111,4 +127,10 @@ export type Finding = {
   involves: { ref: string; inputText: string; nameZh?: string }[];
   /** Which recorded conditions took part, if any. */
   conditions: ConditionCode[];
+  /**
+   * Regulator-approved text quoted from the matched product, when the rule
+   * draws its evidence from the register rather than from a published
+   * criterion. Never edited, never summarised.
+   */
+  officialText?: { productName: string; permit: string; text: string }[];
 };

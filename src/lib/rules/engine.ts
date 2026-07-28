@@ -92,6 +92,17 @@ function evaluate(
     };
   }
 
+  if ("officialWarningMentionsAnyOf" in predicate) {
+    // The evidence is the product's own approved warning, so the match is made
+    // against that text and the text itself is carried onto the finding.
+    const items = input.items.filter((i) =>
+      predicate.officialWarningMentionsAnyOf.some((term) =>
+        (i.officialWarning ?? "").includes(term),
+      ),
+    );
+    return items.length > 0 ? { items, conditions: [] } : null;
+  }
+
   if ("duplicateClassAmong" in predicate) {
     for (const className of predicate.duplicateClassAmong) {
       const tokens = classTokens(classes, [className]);
@@ -134,7 +145,26 @@ function toFinding(
       nameZh: i.nameZh,
     })),
     conditions: match.conditions,
+    officialText: quotedWarnings(match.items),
   };
+}
+
+/**
+ * Approved warning text from the matched products, quoted whole.
+ *
+ * A regulator's warning is evidence, and evidence is quoted rather than
+ * summarised — the pharmacist reading this finding should see the wording the
+ * regulator approved, not our rendering of it.
+ */
+function quotedWarnings(items: EvaluationItem[]) {
+  const quoted = items
+    .filter((i) => i.officialWarning)
+    .map((i) => ({
+      productName: i.nameZh ?? i.inputText,
+      permit: i.permit ?? i.ref,
+      text: i.officialWarning!,
+    }));
+  return quoted.length > 0 ? quoted : undefined;
 }
 
 export function evaluateRules(

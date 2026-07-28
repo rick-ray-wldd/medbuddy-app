@@ -71,15 +71,35 @@ function isAmbiguous(records: { ingredients?: string[]; nameZh: string }[]): boo
   return shapes.size > 1;
 }
 
-/**
- * Below this length a "contains" match means almost nothing — in either
- * direction.
- *
- * The register holds product keys of one and two characters. Without a floor on
- * the candidate as well as on the input, any sentence containing those two
- * characters would "identify" that product.
- */
+/** Below this length a "contains" match means almost nothing. */
 const MIN_SUBSTRING_LENGTH = 3;
+
+/**
+ * Which direction of substring matching each register gets, and why.
+ *
+ * **Forward** — the register name contains what was typed. This is partial
+ * transcription: 脈優錠 against 脈優錠5毫克. Safe for both registers, because a
+ * fragment matching several products lands in `ambiguous`.
+ *
+ * **Reverse** — what was typed contains the register name. This is colloquial
+ * description: 「鄰居給的紅麴膠囊」 against 紅麴膠囊. It is confined to health
+ * foods, and the reason is the asymmetry between the two registers.
+ *
+ * Medicine names are copied off a printed pharmacy bag, so reverse matching
+ * buys almost nothing there — and it costs a great deal. 23,211 medicines
+ * include 1,252 names of four characters or fewer, 169 of them inside a rule
+ * class, so 「新理眠錠」 would silently become 理眠錠 (NITRAZEPAM) and fabricate
+ * a benzodiazepine finding carrying a real permit and a verbatim criterion.
+ * That is exactly the confident wrong answer this file exists to refuse.
+ *
+ * A supplement, by contrast, is described from memory rather than copied, the
+ * register is 464 products rather than 23,211, and nothing in it is a
+ * prescription medicine.
+ */
+const REVERSE_MATCHING: Record<"drugs" | "healthFoods", boolean> = {
+  drugs: false,
+  healthFoods: true,
+};
 
 export class Resolver {
   private readonly drugByKey = new Map<string, DrugRecord[]>();
@@ -127,11 +147,15 @@ export class Resolver {
     //    Handles a bag transcribed without its strength, or a bottle described
     //    by the part of the name someone remembers.
     if (key.length >= MIN_SUBSTRING_LENGTH) {
-      const drugHits = this.searchContains(this.drugByKey, key);
+      const drugHits = this.searchContains(this.drugByKey, key, REVERSE_MATCHING.drugs);
       if (drugHits.length > 0) {
         return this.fromDrugs(drugHits, inputText, source, "contains");
       }
-      const foodHits = this.searchContains(this.foodByKey, key);
+      const foodHits = this.searchContains(
+        this.foodByKey,
+        key,
+        REVERSE_MATCHING.healthFoods,
+      );
       if (foodHits.length > 0) {
         return this.fromFoods(foodHits, inputText, source, "contains");
       }
@@ -142,12 +166,14 @@ export class Resolver {
 
   private searchContains<
     T extends { key: string; permit: string; nameZh: string; ingredients?: string[] },
-  >(index: Map<string, T[]>, key: string): T[] {
+  >(index: Map<string, T[]>, key: string, allowReverse: boolean): T[] {
     const hits: T[] = [];
     for (const [candidateKey, records] of index) {
       const forward = candidateKey.includes(key);
       const reverse =
-        candidateKey.length >= MIN_SUBSTRING_LENGTH && key.includes(candidateKey);
+        allowReverse &&
+        candidateKey.length >= MIN_SUBSTRING_LENGTH &&
+        key.includes(candidateKey);
       if (forward || reverse) {
         hits.push(...records);
         // Stop early: once the candidates disagree about what they contain the

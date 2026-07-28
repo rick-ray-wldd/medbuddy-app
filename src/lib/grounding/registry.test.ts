@@ -71,6 +71,37 @@ describe("resolving against real data", () => {
     expect(has("ACETAMINOPHEN")).toBe(true);
   });
 
+  it("does not turn a longer medicine name into a shorter one", () => {
+    // A review found these live: the reverse direction of substring matching
+    // let a name that merely ends with a registered product become that
+    // product. 理眠錠 is NITRAZEPAM, so 新理眠錠 fabricated a benzodiazepine
+    // with a real permit and a verbatim STOPP criterion attached.
+    const shortDrugs = registers.drugs.drugs.filter(
+      (d) => d.nameZh.length >= 3 && d.nameZh.length <= 4 && d.ingredients.length > 0,
+    );
+    expect(shortDrugs.length).toBeGreaterThan(100);
+
+    for (const d of shortDrugs.slice(0, 60)) {
+      const invented = `新${d.nameZh}`;
+      // Only meaningful when the invented name is not itself registered.
+      if (registers.drugs.drugs.some((x) => x.nameZh === invented)) continue;
+      const r = resolver.resolveOne({ text: invented, source: "prescription" });
+      if (r.resolved) {
+        expect(r.nameZh).not.toBe(d.nameZh);
+      }
+    }
+  });
+
+  it("still recognises a supplement described in the words a family uses", () => {
+    // Reverse matching survives where it earns its keep: a supplement is
+    // described from memory, the register is 464 products, and none of them
+    // is a prescription medicine.
+    const r = resolver.resolveOne({ text: "鄰居給的紅麴膠囊", source: "supplement" });
+    expect(r.resolved).toBe(true);
+    if (!r.resolved) return;
+    expect(r.register).toBe("tfda_health_food");
+  });
+
   it("refuses to name something that is in no register", () => {
     const r = resolver.resolveOne({ text: "鄰居送的不知名膠囊", source: "supplement" });
     expect(r.resolved).toBe(false);

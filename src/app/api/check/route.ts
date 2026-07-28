@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const submitted = (body.items ?? []).filter((i) => i.text.trim().length > 0);
   const audience: NarrationAudience = body.audience === "elder" ? "elder" : "caregiver";
 
-  const { resolver, ruleSets, classes } = getRegistry();
+  const { resolver, ruleSets, classes, knownMedicines } = getRegistry();
 
   const verdict = buildVerdict(
     {
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   // No model is wired up in this build, so narration is the deterministic
   // route. The seam is here: pass a Narrator and its output is validated
   // against the verdict before it is returned, and rejected if it deviates.
-  const outcome = await narrate(verdict, audience, null);
+  const outcome = await narrate(verdict, audience, null, knownMedicines);
 
   return NextResponse.json({
     verdict,

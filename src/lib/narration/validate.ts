@@ -14,6 +14,37 @@
 import type { Verdict } from "../verdict/types";
 import type { Narration } from "./types";
 
+/**
+ * Names the registers know, for catching invention.
+ *
+ * The narrator may not reach the registers. The validator may — and must.
+ * Checking only 【】-marked names left the obvious attack open: a fluent
+ * paragraph naming a medicine it was never given, with an interaction nobody
+ * evaluated, marked as ordinary explanation. Detecting that needs exactly the
+ * knowledge the narrator is denied, which is why it lives on this side of the
+ * seam.
+ *
+ * Names shorter than this are excluded: two characters appear inside ordinary
+ * prose and would reject valid narration.
+ */
+export type KnownMedicineIndex = { names: string[] };
+
+const MIN_DETECTABLE_NAME_LENGTH = 3;
+
+export function buildKnownMedicineIndex(sources: {
+  drugs: { nameZh: string }[];
+  healthFoods: { nameZh: string }[];
+}): KnownMedicineIndex {
+  const names = new Set<string>();
+  for (const d of sources.drugs) {
+    if (d.nameZh.length >= MIN_DETECTABLE_NAME_LENGTH) names.add(d.nameZh);
+  }
+  for (const f of sources.healthFoods) {
+    if (f.nameZh.length >= MIN_DETECTABLE_NAME_LENGTH) names.add(f.nameZh);
+  }
+  return { names: [...names] };
+}
+
 export type Violation = {
   code:
     | "unknown_medicine_named"
@@ -54,6 +85,7 @@ const ESCALATION_PATTERN = /藥師|醫師|醫生/;
 export function validateNarration(
   narration: Narration,
   verdict: Verdict,
+  known?: KnownMedicineIndex,
 ): ValidationResult {
   const violations: Violation[] = [];
   const all = narration.segments.map((s) => s.text).join("\n");
@@ -86,6 +118,23 @@ export function validateNarration(
       violations.push({
         code: "unknown_medicine_named",
         detail: `"${named}" appears in the narration but not in the verdict`,
+      });
+    }
+  }
+
+  // 2b. No medicine the registers know but this verdict does not contain,
+  //     marked or not. Without this, unmarked prose was unchecked: a verdict
+  //     holding only paracetamol accepted a fluent sentence about aspirin and
+  //     a bleeding risk nobody had evaluated.
+  if (known) {
+    for (const name of known.names) {
+      if (!ourOwnWords.includes(name)) continue;
+      if (permitted.has(name)) continue;
+      // A name inside another name we were given is not an invention.
+      if ([...permitted].some((p) => p.includes(name))) continue;
+      violations.push({
+        code: "unknown_medicine_named",
+        detail: `"${name}" is a medicine in the register but not in this verdict`,
       });
     }
   }

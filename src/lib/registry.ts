@@ -11,6 +11,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Resolver, type Registers } from "./grounding/resolve";
 import type { DrugClasses, RuleSet } from "./rules/types";
+import {
+  buildKnownMedicineIndex,
+  type KnownMedicineIndex,
+} from "./narration/validate";
 
 function read<T>(...segments: string[]): T {
   return JSON.parse(readFileSync(path.join(process.cwd(), ...segments), "utf8")) as T;
@@ -21,6 +25,7 @@ let cached: {
   registers: Registers;
   ruleSets: RuleSet[];
   classes: DrugClasses;
+  knownMedicines: KnownMedicineIndex;
 } | null = null;
 
 export function getRegistry() {
@@ -39,6 +44,12 @@ export function getRegistry() {
       read("config", "rules", "tfda-health-food-warnings.json"),
     ],
     classes: read("config", "rules", "drug-classes.json"),
+    // The validator is allowed to know what the narrator is not: this is how
+    // it catches a medicine named in fluent prose that no rule ever saw.
+    knownMedicines: buildKnownMedicineIndex({
+      drugs: registers.drugs.drugs,
+      healthFoods: registers.healthFoods.healthFoods,
+    }),
   };
 
   return cached;

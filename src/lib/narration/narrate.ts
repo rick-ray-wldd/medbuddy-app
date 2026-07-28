@@ -13,7 +13,11 @@
 import type { Verdict } from "../verdict/types";
 import { DeterministicNarrator } from "./deterministic";
 import type { Narration, NarrationAudience, Narrator } from "./types";
-import { validateNarration, type Violation } from "./validate";
+import {
+  validateNarration,
+  type KnownMedicineIndex,
+  type Violation,
+} from "./validate";
 
 export type NarrationOutcome = {
   narration: Narration;
@@ -42,9 +46,10 @@ export type NarrationOutcome = {
 async function verifiedFallback(
   verdict: Verdict,
   audience: NarrationAudience,
+  known?: KnownMedicineIndex,
 ): Promise<{ narration: Narration; violations?: Violation[] }> {
   const narration = await new DeterministicNarrator().narrate(verdict, audience);
-  const result = validateNarration(narration, verdict);
+  const result = validateNarration(narration, verdict, known);
   return result.ok ? { narration } : { narration, violations: result.violations };
 }
 
@@ -52,14 +57,15 @@ export async function narrate(
   verdict: Verdict,
   audience: NarrationAudience,
   preferred: Narrator | null,
+  known?: KnownMedicineIndex,
 ): Promise<NarrationOutcome> {
   if (preferred) {
     try {
       const candidate = await preferred.narrate(verdict, audience);
-      const result = validateNarration(candidate, verdict);
+      const result = validateNarration(candidate, verdict, known);
       if (result.ok) return { narration: candidate, usedFallback: false };
 
-      const fallback = await verifiedFallback(verdict, audience);
+      const fallback = await verifiedFallback(verdict, audience, known);
       return {
         narration: fallback.narration,
         rejected: { producedBy: candidate.producedBy, violations: result.violations },
@@ -70,7 +76,7 @@ export async function narrate(
       // A model that is unreachable, slow, or returns something unparseable is
       // the same situation as one that failed validation: use the text we can
       // vouch for.
-      const fallback = await verifiedFallback(verdict, audience);
+      const fallback = await verifiedFallback(verdict, audience, known);
       return {
         narration: fallback.narration,
         usedFallback: true,
@@ -79,7 +85,7 @@ export async function narrate(
     }
   }
 
-  const fallback = await verifiedFallback(verdict, audience);
+  const fallback = await verifiedFallback(verdict, audience, known);
   return {
     narration: fallback.narration,
     usedFallback: false,

@@ -8,7 +8,7 @@ import type { Verdict, VerdictSubject } from "../verdict/types";
 import { DeterministicNarrator } from "./deterministic";
 import { narrate } from "./narrate";
 import type { Narration, NarrationAudience, Narrator } from "./types";
-import { validateNarration } from "./validate";
+import { buildKnownMedicineIndex, validateNarration } from "./validate";
 
 let resolver: Resolver;
 let registers: Registers;
@@ -199,6 +199,66 @@ describe("quoting a source that looks like an instruction", () => {
     const outcome = await narrate(verdict, "caregiver", null);
     expect(outcome.fallbackViolations).toBeUndefined();
     expect(validateNarration(outcome.narration, verdict)).toEqual({ ok: true });
+  });
+});
+
+describe("invention in fluent prose", () => {
+  // A review found this open: only 【】-marked names and quoted segments were
+  // checked, so ordinary explanation text was unchecked entirely. The fix is
+  // to let the validator see the registers — knowledge the narrator is denied.
+  it("rejects a medicine the registers know but this verdict does not contain", async () => {
+    const known = buildKnownMedicineIndex({
+      drugs: registers.drugs.drugs,
+      healthFoods: registers.healthFoods.healthFoods,
+    });
+    // A real product name from the register, absent from this verdict, and
+    // free of digits — a name carrying its own strength would trip the dose
+    // check and obscure what this test is about.
+    const absent = registers.drugs.drugs.find(
+      (d) =>
+        d.nameZh.length >= 4 &&
+        !/[0-9０-９]/.test(d.nameZh) &&
+        d.ingredients.some((i) => i.includes("ASPIRIN")),
+    )!;
+
+    const verdict = buildVerdict(
+      { ...father, conditions: [] },
+      resolver.resolveAll([{ text: paracetamolName(), source: "otc" }]),
+      ruleSets,
+      classes,
+    );
+    expect(verdict.findings).toHaveLength(0);
+
+    const invented = {
+      subjectId: verdict.subject.id,
+      subjectName: "父親",
+      producedBy: "claude" as const,
+      segments: [
+        {
+          kind: "explained" as const,
+          text: `父親好。您的${absent.nameZh}跟其他藥一起吃可能會造成出血,請先問藥師。`,
+        },
+      ],
+    };
+
+    // Without the index this passed — nothing looked at unmarked prose.
+    expect(validateNarration(invented, verdict).ok).toBe(true);
+
+    const guarded = validateNarration(invented, verdict, known);
+    expect(guarded.ok).toBe(false);
+    if (guarded.ok) return;
+    expect(guarded.violations.map((v) => v.code)).toContain("unknown_medicine_named");
+  });
+
+  it("still accepts a narration naming only what it was given", async () => {
+    const known = buildKnownMedicineIndex({
+      drugs: registers.drugs.drugs,
+      healthFoods: registers.healthFoods.healthFoods,
+    });
+    const verdict = fatherVerdict();
+    const outcome = await narrate(verdict, "caregiver", null, known);
+    expect(outcome.fallbackViolations).toBeUndefined();
+    expect(validateNarration(outcome.narration, verdict, known)).toEqual({ ok: true });
   });
 });
 

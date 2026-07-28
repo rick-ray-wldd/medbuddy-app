@@ -49,3 +49,4 @@ data/img/
 *.png
 !public/**
 .env.local
+.vercel.medbuddy-old-link/

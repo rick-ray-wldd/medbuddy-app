@@ -4,7 +4,8 @@ import type {
   DeliveryResult,
   DeliveryTarget,
 } from "../types";
-import { type AudioStore, NotImplementedAudioStore } from "./audio";
+import type { AudioStore } from "./audio";
+import { BlobAudioStore } from "./blob-audio-store";
 import { LIMITS } from "./config";
 import { checkTextLimit, containsTappableLink, validateSubject } from "./validate";
 
@@ -28,7 +29,10 @@ export class LineDelivery implements Delivery {
 
   constructor(private readonly deps: LineDeliveryDeps) {
     this.fetchImpl = deps.fetchImpl ?? fetch;
-    this.audioStore = deps.audioStore ?? new NotImplementedAudioStore();
+    // Default = private Vercel Blob + signed short-lived URLs. Env is only
+    // read when the speech path actually runs, so text-only usage and tests
+    // stay env-free.
+    this.audioStore = deps.audioStore ?? new BlobAudioStore();
   }
 
   async send(
@@ -48,7 +52,12 @@ export class LineDelivery implements Delivery {
     const limitError = checkTextLimit(message.text);
     if (limitError) return limitError;
 
-    // §7 audio out — hosted HTTPS URL + explicit duration; m4a target.
+    // §7 audio out — hosted HTTPS URL + explicit duration. Verified
+    // 2026-07-28: LINE accepts m4a OR mp3 (drift log), 200 MB max file size.
+    // https://developers.line.biz/en/reference/messaging-api/#audio-message
+    let audioMessage:
+      | { type: "audio"; originalContentUrl: string; duration: number }
+      | undefined;
     if (message.speech) {
       if (message.speech.durationMs > LIMITS.maxAudioDurationMs) {
         return {
@@ -57,20 +66,51 @@ export class LineDelivery implements Delivery {
           retryable: false,
         };
       }
-      // TODO(line-adapter): transcodeToM4a() if format !== "m4a" (see audio.ts)
-      // → this.audioStore.put() → send an audio message referencing the hosted
-      // URL + durationMs alongside the text. Until implemented: fail loudly
-      // rather than silently dropping the speech half (§6.6).
-      return {
-        ok: false,
-        reason: "audio-delivery-not-implemented",
-        retryable: false,
+      if (message.speech.audio.byteLength > LIMITS.maxAudioFileBytes) {
+        return {
+          ok: false,
+          reason: "audio-exceeds-size-limit",
+          retryable: false,
+        };
+      }
+      if (message.speech.format === "wav") {
+        // No serverless-feasible transcoder in the hackathon window (see
+        // audio.ts) — refuse loudly rather than ship broken audio (§6.6).
+        return {
+          ok: false,
+          reason: "unsupported-audio-format",
+          retryable: false,
+        };
+      }
+
+      let hosted;
+      try {
+        hosted = await this.audioStore.put(
+          message.speech.audio,
+          message.speech.format,
+        );
+      } catch (err) {
+        // Logging rule: never audio bytes or hosted URLs — reason only.
+        console.error("[line-adapter] audio hosting failed", {
+          reason: err instanceof Error ? err.message : "unknown",
+        });
+        return { ok: false, reason: "audio-hosting-failed", retryable: true };
+      }
+      if (!hosted.url.startsWith("https://")) {
+        // §7: LINE requires HTTPS; health information must never travel plain.
+        return { ok: false, reason: "audio-url-not-https", retryable: false };
+      }
+      audioMessage = {
+        type: "audio",
+        originalContentUrl: hosted.url,
+        duration: message.speech.durationMs,
       };
     }
 
     // Push endpoint verified 2026-07-28: POST https://api.line.me/v2/bot/message/push
     // with Authorization: Bearer {token} + Content-Type: application/json,
-    // body { to, messages } (max 5 messages — we send 1).
+    // body { to, messages } (max 5 messages — we send 1–2: text, then audio;
+    // multi-message pushes deliver in array order).
     // https://developers.line.biz/en/reference/messaging-api/#send-push-message
     //
     // `message.text` is assigned VERBATIM by direct property assignment — no
@@ -78,9 +118,10 @@ export class LineDelivery implements Delivery {
     // carries no reply token → push-only (README question 1 for Ray).
     // Exactly ONE request per send(), never auto-retried (§6.2); upstream
     // decides what to do with `retryable`. send() never throws (§6.6).
+    const textMessage = { type: "text", text: message.text };
     const payload = {
       to: target.channelUserId,
-      messages: [{ type: "text", text: message.text }],
+      messages: audioMessage ? [textMessage, audioMessage] : [textMessage],
     };
 
     let response: Response;

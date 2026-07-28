@@ -40,3 +40,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .cache/
+
+# Real prescription-bag photographs. Never commit these: they carry a
+# patient name, age, dispensing date and pharmacy. Kept outside the repo.
+data/img/
+*.jpg
+*.jpeg
+*.png
+!public/**

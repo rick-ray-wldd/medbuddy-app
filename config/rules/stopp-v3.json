@@ -1,0 +1,159 @@
+{
+  "id": "stopp-v3",
+  "version": "3 (2023), with the correction of 16 June 2023",
+  "title": "Screening Tool of Older Persons' Prescriptions (STOPP) version 3",
+  "appliesFromAge": 65,
+  "citation": {
+    "reference": "O'Mahony D, Cherubini A, Guiteras AR, et al. STOPP/START criteria for potentially inappropriate prescribing in older people: version 3. European Geriatric Medicine. 2023;14(4):625-632.",
+    "doi": "10.1007/s41999-023-00777-y",
+    "correctionDoi": "10.1007/s41999-023-00812-y",
+    "licence": "CC BY 4.0",
+    "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "criteriaSource": "Appendix 1 of the supplementary information",
+    "retrievedAt": "2026-07-27"
+  },
+  "coverage": {
+    "criteriaInSource": 133,
+    "criteriaEncodedHere": 8,
+    "note": "A deliberate subset. Each encoded criterion carries the source wording verbatim so a reviewer can check the encoding against it. Encoding all 133 is mechanical, not conceptual — several depend on clinical values this product cannot observe, and the honest limit is stated per rule rather than by quietly omitting them."
+  },
+  "conditionVocabulary": [
+    "chronic_liver_disease",
+    "low_bmi",
+    "recurrent_falls",
+    "peptic_ulcer_or_gi_bleed",
+    "heart_failure",
+    "severe_hypertension",
+    "ckd_egfr_under_50"
+  ],
+  "rules": [
+    {
+      "id": "STOPP-L6",
+      "section": "L",
+      "sectionTitle": "Analgesic Drugs",
+      "number": 6,
+      "verbatim": "Paracetamol at doses ≥ 3 g/24 hours in patients with poor nutritional status i.e., BMI < 18 or chronic liver disease (risk of hepatotoxicity).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["paracetamol"] },
+          { "conditionAnyOf": ["chronic_liver_disease", "low_bmi"] }
+        ]
+      },
+      "severity": "consult_pharmacist",
+      "category": "hepatotoxicity",
+      "limits": "The criterion is conditional on a daily dose of 3 g or more. We record what is present, not how much is taken, so this is raised as a question about dose rather than a determination that the threshold is met."
+    },
+    {
+      "id": "STOPP-A3",
+      "section": "A",
+      "sectionTitle": "Indication of medication",
+      "number": 3,
+      "verbatim": "Any duplicate drug class prescription for daily regular use (as distinct from PRN use) e.g., two concurrent NSAIDs, SSRIs, loop diuretics, ACE inhibitors, anticoagulants, antipsychotics, opioid analgesics (optimisation of monotherapy within a single drug class should be observed prior to considering a new agent).",
+      "when": {
+        "duplicateClassAmong": ["nsaid", "anticoagulant", "benzodiazepine", "z_drug"]
+      },
+      "severity": "consult_pharmacist",
+      "category": "therapeutic_duplication",
+      "limits": "The criterion distinguishes daily regular use from as-needed use. We cannot tell which a cupboard item is, so duplication is reported as present rather than as regular."
+    },
+    {
+      "id": "STOPP-C10",
+      "section": "C",
+      "sectionTitle": "Coagulation System",
+      "number": 10,
+      "verbatim": "Nonsteroidal anti-inflammatory drugs (NSAIDs) and vitamin K antagonist, direct thrombin inhibitor or factor Xa inhibitors in combination (risk of major gastrointestinal bleeding).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["nsaid", "nsaid_cox2_selective"] },
+          { "classAnyOf": ["anticoagulant"] }
+        ]
+      },
+      "severity": "consult_physician",
+      "category": "bleeding_risk",
+      "limits": null
+    },
+    {
+      "id": "STOPP-H1",
+      "section": "H",
+      "sectionTitle": "Musculoskeletal System",
+      "number": 1,
+      "verbatim": "Non-steroidal anti-inflammatory drugs (NSAIDs) other than COX-2 selective agents with history of peptic ulcer disease or gastrointestinal bleeding, unless with concurrent PPI or H2 antagonist (risk of peptic ulcer relapse).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["nsaid"] },
+          { "conditionAnyOf": ["peptic_ulcer_or_gi_bleed"] }
+        ]
+      },
+      "severity": "consult_physician",
+      "category": "gi_risk",
+      "limits": "The criterion is lifted by a concurrent PPI or H2 antagonist. Those classes are not yet encoded, so this may raise where the exception applies."
+    },
+    {
+      "id": "STOPP-H2",
+      "section": "H",
+      "sectionTitle": "Musculoskeletal System",
+      "number": 2,
+      "verbatim": "NSAID's with severe hypertension i.e., systolic blood pressure consistently above 170 mmHg and/or diastolic blood pressure consistently above 100 mmHg (risk of exacerbation of hypertension).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["nsaid", "nsaid_cox2_selective"] },
+          { "conditionAnyOf": ["severe_hypertension"] }
+        ]
+      },
+      "severity": "consult_physician",
+      "category": "cardiovascular",
+      "limits": "Depends on blood pressure readings this product does not hold. It fires only when severe hypertension has been recorded as a condition by the care team."
+    },
+    {
+      "id": "STOPP-E4",
+      "section": "E",
+      "sectionTitle": "Renal System",
+      "number": 4,
+      "verbatim": "NSAID's if eGFR < 50 ml/min/1.73m2 (risk of deterioration in renal function).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["nsaid", "nsaid_cox2_selective"] },
+          { "conditionAnyOf": ["ckd_egfr_under_50"] }
+        ]
+      },
+      "severity": "consult_physician",
+      "category": "renal",
+      "limits": "Depends on a laboratory value this product does not hold. It fires only when reduced renal function has been recorded as a condition by the care team."
+    },
+    {
+      "id": "STOPP-K1",
+      "section": "K",
+      "sectionTitle": "Drug classes that predictably increase falls risk in susceptible older people",
+      "number": 1,
+      "verbatim": "Benzodiazepines in patients with recurrent falls (may cause reduced sensorium, impair balance).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["benzodiazepine"] },
+          { "conditionAnyOf": ["recurrent_falls"] }
+        ]
+      },
+      "severity": "consult_physician",
+      "category": "falls_risk",
+      "limits": null
+    },
+    {
+      "id": "STOPP-K4",
+      "section": "K",
+      "sectionTitle": "Drug classes that predictably increase falls risk in susceptible older people",
+      "number": 4,
+      "verbatim": "Hypnotic Z-drugs i.e., zopiclone, zolpidem, zaleplon in patients with recurrent falls (may cause protracted daytime sedation, ataxia).",
+      "when": {
+        "allOf": [
+          { "classAnyOf": ["z_drug"] },
+          { "conditionAnyOf": ["recurrent_falls"] }
+        ]
+      },
+      "severity": "consult_physician",
+      "category": "falls_risk",
+      "limits": null
+    }
+  ],
+  "notEncoded": {
+    "alcohol": "The source contains no criterion pairing alcohol with these medicines, so none is encoded. Reported drinking is carried into the clinician summary as observation, never as a rule finding — inventing a criterion and attributing it to STOPP would be worse than the gap."
+  }
+}

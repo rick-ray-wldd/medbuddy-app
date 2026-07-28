@@ -1,0 +1,66 @@
+{
+  "note": "Ingredient tokens matched against 主成分略述 from the TFDA register. Matching is by substring, because the register records salts and forms — DICLOFENAC SODIUM, IBUPROFEN LYSINE, ZOLPIDEM HEMITARTRATE — and a criterion written about diclofenac means all of them. Every token below was checked against the committed register; the count is how many active permits contain it.",
+  "matchingBias": "Deliberately permissive. A false positive costs a question to a pharmacist; a false negative costs a missed harm. In a screening tool those are not symmetric, so the bias is towards raising. This is stated as a limit on every finding rather than hidden.",
+  "classes": {
+    "nsaid": {
+      "label": "非類固醇消炎止痛藥 (NSAID)",
+      "labelEn": "Non-steroidal anti-inflammatory drug",
+      "tokens": [
+        "IBUPROFEN",
+        "DICLOFENAC",
+        "NAPROXEN",
+        "KETOPROFEN",
+        "INDOMETHACIN",
+        "PIROXICAM",
+        "MELOXICAM",
+        "MEFENAMIC",
+        "SULINDAC",
+        "FLURBIPROFEN",
+        "ACECLOFENAC",
+        "ETODOLAC",
+        "TENOXICAM",
+        "LORNOXICAM",
+        "NIMESULIDE"
+      ]
+    },
+    "nsaid_cox2_selective": {
+      "label": "COX-2 選擇性消炎止痛藥",
+      "labelEn": "COX-2 selective NSAID",
+      "tokens": ["CELECOXIB", "ETORICOXIB"]
+    },
+    "paracetamol": {
+      "label": "乙醯胺酚(普拿疼類)",
+      "labelEn": "Paracetamol / acetaminophen",
+      "tokens": ["ACETAMINOPHEN", "PARACETAMOL"]
+    },
+    "anticoagulant": {
+      "label": "抗凝血劑",
+      "labelEn": "Vitamin K antagonist, direct thrombin inhibitor or factor Xa inhibitor",
+      "tokens": ["WARFARIN", "DABIGATRAN", "RIVAROXABAN", "APIXABAN", "EDOXABAN"]
+    },
+    "benzodiazepine": {
+      "label": "苯二氮平類鎮靜安眠藥",
+      "labelEn": "Benzodiazepine",
+      "tokens": [
+        "DIAZEPAM",
+        "LORAZEPAM",
+        "ALPRAZOLAM",
+        "BROMAZEPAM",
+        "CLONAZEPAM",
+        "ESTAZOLAM",
+        "FLUNITRAZEPAM",
+        "MIDAZOLAM",
+        "NITRAZEPAM",
+        "OXAZEPAM",
+        "TEMAZEPAM",
+        "TRIAZOLAM",
+        "BROTIZOLAM"
+      ]
+    },
+    "z_drug": {
+      "label": "非苯二氮平類安眠藥 (Z-drug)",
+      "labelEn": "Hypnotic Z-drug",
+      "tokens": ["ZOLPIDEM", "ZOPICLONE", "ZALEPLON"]
+    }
+  }
+}

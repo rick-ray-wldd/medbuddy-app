@@ -82,7 +82,7 @@ function caregiverSegments(verdict: Verdict): Segment[] {
     if (finding.limits) {
       segments.push({
         kind: "coverage",
-        text: finding.limits,
+        text: finding.limitsZh ?? finding.limits,
         attribution: `${finding.ruleId} 的適用範圍`,
         findingId: finding.id,
       });

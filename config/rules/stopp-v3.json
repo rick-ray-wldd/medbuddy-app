@@ -35,13 +35,23 @@
       "verbatim": "Paracetamol at doses ≥ 3 g/24 hours in patients with poor nutritional status i.e., BMI < 18 or chronic liver disease (risk of hepatotoxicity).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["paracetamol"] },
-          { "conditionAnyOf": ["chronic_liver_disease", "low_bmi"] }
+          {
+            "classAnyOf": [
+              "paracetamol"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "chronic_liver_disease",
+              "low_bmi"
+            ]
+          }
         ]
       },
       "severity": "consult_pharmacist",
       "category": "hepatotoxicity",
-      "limits": "The criterion is conditional on a daily dose of 3 g or more. We record what is present, not how much is taken, so this is raised as a question about dose rather than a determination that the threshold is met."
+      "limits": "The criterion is conditional on a daily dose of 3 g or more. We record what is present, not how much is taken, so this is raised as a question about dose rather than a determination that the threshold is met.",
+      "limitsZh": "這條準則的條件是每日劑量達 3 公克以上。本系統記錄「有什麼」,不記錄「吃多少」,所以這裡是提出一個關於劑量的問題,不是判定已超過。"
     },
     {
       "id": "STOPP-A3",
@@ -50,11 +60,17 @@
       "number": 3,
       "verbatim": "Any duplicate drug class prescription for daily regular use (as distinct from PRN use) e.g., two concurrent NSAIDs, SSRIs, loop diuretics, ACE inhibitors, anticoagulants, antipsychotics, opioid analgesics (optimisation of monotherapy within a single drug class should be observed prior to considering a new agent).",
       "when": {
-        "duplicateClassAmong": ["nsaid", "anticoagulant", "benzodiazepine", "z_drug"]
+        "duplicateClassAmong": [
+          "nsaid",
+          "anticoagulant",
+          "benzodiazepine",
+          "z_drug"
+        ]
       },
       "severity": "consult_pharmacist",
       "category": "therapeutic_duplication",
-      "limits": "The criterion distinguishes daily regular use from as-needed use. We cannot tell which a cupboard item is, so duplication is reported as present rather than as regular."
+      "limits": "The criterion distinguishes daily regular use from as-needed use. We cannot tell which a cupboard item is, so duplication is reported as present rather than as regular.",
+      "limitsZh": "原準則區分每日固定服用與需要時才吃。櫃子裡的品項無法分辨是哪一種,所以只回報「重複」,不回報「固定重複」。"
     },
     {
       "id": "STOPP-C10",
@@ -64,8 +80,17 @@
       "verbatim": "Nonsteroidal anti-inflammatory drugs (NSAIDs) and vitamin K antagonist, direct thrombin inhibitor or factor Xa inhibitors in combination (risk of major gastrointestinal bleeding).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["nsaid", "nsaid_cox2_selective"] },
-          { "classAnyOf": ["anticoagulant"] }
+          {
+            "classAnyOf": [
+              "nsaid",
+              "nsaid_cox2_selective"
+            ]
+          },
+          {
+            "classAnyOf": [
+              "anticoagulant"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
@@ -80,13 +105,22 @@
       "verbatim": "Non-steroidal anti-inflammatory drugs (NSAIDs) other than COX-2 selective agents with history of peptic ulcer disease or gastrointestinal bleeding, unless with concurrent PPI or H2 antagonist (risk of peptic ulcer relapse).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["nsaid"] },
-          { "conditionAnyOf": ["peptic_ulcer_or_gi_bleed"] }
+          {
+            "classAnyOf": [
+              "nsaid"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "peptic_ulcer_or_gi_bleed"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
       "category": "gi_risk",
-      "limits": "The criterion is lifted by a concurrent PPI or H2 antagonist. Those classes are not yet encoded, so this may raise where the exception applies."
+      "limits": "The criterion is lifted by a concurrent PPI or H2 antagonist. Those classes are not yet encoded, so this may raise where the exception applies.",
+      "limitsZh": "原準則在同時使用 PPI 或 H2 拮抗劑時不適用。那兩類藥尚未收錄,因此可能在例外情況下仍然提出。"
     },
     {
       "id": "STOPP-H2",
@@ -96,13 +130,23 @@
       "verbatim": "NSAID's with severe hypertension i.e., systolic blood pressure consistently above 170 mmHg and/or diastolic blood pressure consistently above 100 mmHg (risk of exacerbation of hypertension).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["nsaid", "nsaid_cox2_selective"] },
-          { "conditionAnyOf": ["severe_hypertension"] }
+          {
+            "classAnyOf": [
+              "nsaid",
+              "nsaid_cox2_selective"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "severe_hypertension"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
       "category": "cardiovascular",
-      "limits": "Depends on blood pressure readings this product does not hold. It fires only when severe hypertension has been recorded as a condition by the care team."
+      "limits": "Depends on blood pressure readings this product does not hold. It fires only when severe hypertension has been recorded as a condition by the care team.",
+      "limitsZh": "依賴本系統沒有的血壓數值。只有在照護者已把「嚴重高血壓」記錄為狀況時才會提出。"
     },
     {
       "id": "STOPP-E4",
@@ -112,13 +156,23 @@
       "verbatim": "NSAID's if eGFR < 50 ml/min/1.73m2 (risk of deterioration in renal function).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["nsaid", "nsaid_cox2_selective"] },
-          { "conditionAnyOf": ["ckd_egfr_under_50"] }
+          {
+            "classAnyOf": [
+              "nsaid",
+              "nsaid_cox2_selective"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "ckd_egfr_under_50"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
       "category": "renal",
-      "limits": "Depends on a laboratory value this product does not hold. It fires only when reduced renal function has been recorded as a condition by the care team."
+      "limits": "Depends on a laboratory value this product does not hold. It fires only when reduced renal function has been recorded as a condition by the care team.",
+      "limitsZh": "依賴本系統沒有的檢驗數值。只有在照護者已把腎功能下降記錄為狀況時才會提出。"
     },
     {
       "id": "STOPP-K1",
@@ -128,8 +182,16 @@
       "verbatim": "Benzodiazepines in patients with recurrent falls (may cause reduced sensorium, impair balance).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["benzodiazepine"] },
-          { "conditionAnyOf": ["recurrent_falls"] }
+          {
+            "classAnyOf": [
+              "benzodiazepine"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "recurrent_falls"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
@@ -144,8 +206,16 @@
       "verbatim": "Hypnotic Z-drugs i.e., zopiclone, zolpidem, zaleplon in patients with recurrent falls (may cause protracted daytime sedation, ataxia).",
       "when": {
         "allOf": [
-          { "classAnyOf": ["z_drug"] },
-          { "conditionAnyOf": ["recurrent_falls"] }
+          {
+            "classAnyOf": [
+              "z_drug"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "recurrent_falls"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",

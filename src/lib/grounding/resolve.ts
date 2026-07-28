@@ -52,14 +52,24 @@ export type Registers = {
 export type RawInput = { text: string; source?: ItemSource };
 
 /**
- * How many candidates we are willing to call a match.
+ * Ambiguity is judged on composition, not on paperwork.
  *
- * A pharmacy bag prints one product; if a fragment matches several distinct
- * permits we do not pick one. Guessing between 「普拿疼」 and 「普拿疼伏冒」 is
- * how a grounding layer produces a confident wrong answer, which is worse than
- * an admitted unknown.
+ * The same product is often registered under more than one permit — renewals,
+ * a second manufacturing site — and those entries carry identical ingredients.
+ * Refusing to identify it because there are two licence numbers would be
+ * pedantry dressed as caution.
+ *
+ * What we will not do is choose between candidates that differ in what they
+ * contain, or in strength. Guessing between 普拿疼膜衣錠 and 普拿疼伏冒 is how a
+ * grounding layer produces a confident wrong answer, which is worse than an
+ * admitted unknown.
  */
-const MAX_CANDIDATES = 1;
+function isAmbiguous(records: { ingredients?: string[]; nameZh: string }[]): boolean {
+  const shapes = new Set(
+    records.map((r) => `${r.nameZh}::${[...(r.ingredients ?? [])].sort().join("|")}`),
+  );
+  return shapes.size > 1;
+}
 
 /** Below this length a "contains" match means almost nothing. */
 const MIN_SUBSTRING_LENGTH = 3;
@@ -123,17 +133,17 @@ export class Resolver {
     return unresolved(inputText, source, "no_match");
   }
 
-  private searchContains<T extends { key: string; permit: string }>(
-    index: Map<string, T[]>,
-    key: string,
-  ): T[] {
+  private searchContains<
+    T extends { key: string; permit: string; nameZh: string; ingredients?: string[] },
+  >(index: Map<string, T[]>, key: string): T[] {
     const hits: T[] = [];
     for (const [candidateKey, records] of index) {
       if (candidateKey.includes(key) || key.includes(candidateKey)) {
         hits.push(...records);
-        // Stop early: past the threshold the answer is "ambiguous" regardless
-        // of how many more there are, and the registers are large.
-        if (distinctPermits(hits) > MAX_CANDIDATES) break;
+        // Stop early: once the candidates disagree about what they contain the
+        // answer is ambiguous however many more there are, and the registers
+        // are large.
+        if (isAmbiguous(hits)) break;
       }
     }
     return hits;
@@ -145,7 +155,7 @@ export class Resolver {
     source: ItemSource,
     matchedBy: ResolvedItem["matchedBy"],
   ): GroundedItem {
-    if (distinctPermits(hits) > MAX_CANDIDATES) {
+    if (isAmbiguous(hits)) {
       return {
         resolved: false,
         inputText,
@@ -189,7 +199,7 @@ export class Resolver {
     source: ItemSource,
     matchedBy: ResolvedItem["matchedBy"],
   ): GroundedItem {
-    if (distinctPermits(hits) > MAX_CANDIDATES) {
+    if (isAmbiguous(hits)) {
       return {
         resolved: false,
         inputText,
@@ -222,10 +232,6 @@ function push<T>(map: Map<string, T[]>, key: string, value: T) {
   const existing = map.get(key);
   if (existing) existing.push(value);
   else map.set(key, [value]);
-}
-
-function distinctPermits(records: { permit: string }[]): number {
-  return new Set(records.map((r) => r.permit)).size;
 }
 
 function unresolved(

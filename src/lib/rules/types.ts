@@ -60,6 +60,8 @@ export type Rule = {
    * with every finding the rule produces.
    */
   limits: string | null;
+  /** The same statement for the reader, who is a Taiwanese family member. */
+  limitsZh?: string;
 };
 
 export type Citation = {
@@ -122,6 +124,7 @@ export type Finding = {
   verbatim: string;
   /** Stated on every finding, never only in documentation. */
   limits: string | null;
+  limitsZh?: string;
   citation: Citation;
   /** Which items triggered it, so the person can see what this is about. */
   involves: { ref: string; inputText: string; nameZh?: string }[];

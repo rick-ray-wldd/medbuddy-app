@@ -138,6 +138,7 @@ function toFinding(
     category: rule.category,
     verbatim: rule.verbatim,
     limits: rule.limits,
+    limitsZh: rule.limitsZh,
     citation: ruleSet.citation,
     involves: match.items.map((i) => ({
       ref: i.ref,

@@ -31,13 +31,25 @@
       "verbatim": "This product's regulator-approved warning names liver disease among the conditions for which it should not be taken, and the person's record includes chronic liver disease.",
       "when": {
         "allOf": [
-          { "officialWarningMentionsAnyOf": ["肝病", "肝功能", "肝、腎損傷", "肝損傷"] },
-          { "conditionAnyOf": ["chronic_liver_disease"] }
+          {
+            "officialWarningMentionsAnyOf": [
+              "肝病",
+              "肝功能",
+              "肝、腎損傷",
+              "肝損傷"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "chronic_liver_disease"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
       "category": "supplement_contraindication",
-      "limits": "Matched on terms appearing in the approved warning text, not on a clinical assessment of this person. The warning is quoted in full on the finding so a pharmacist or physician reads the regulator's wording rather than ours."
+      "limits": "Matched on terms appearing in the approved warning text, not on a clinical assessment of this person. The warning is quoted in full on the finding so a pharmacist or physician reads the regulator's wording rather than ours.",
+      "limitsZh": "比對的是核可警語文字中出現的詞,不是對這個人的臨床評估。警語全文附在下方,請由藥師或醫師閱讀主管機關的原始用字。"
     },
     {
       "id": "TFDA-HF-ANTICOAG",
@@ -47,13 +59,22 @@
       "verbatim": "This product's regulator-approved warning states it is unsuitable for people taking medicines with anticoagulant action, and an anticoagulant is present in the list.",
       "when": {
         "allOf": [
-          { "officialWarningMentionsAnyOf": ["抗凝血"] },
-          { "classAnyOf": ["anticoagulant"] }
+          {
+            "officialWarningMentionsAnyOf": [
+              "抗凝血"
+            ]
+          },
+          {
+            "classAnyOf": [
+              "anticoagulant"
+            ]
+          }
         ]
       },
       "severity": "consult_physician",
       "category": "supplement_interaction",
-      "limits": "The warning refers to medicines with anticoagulant action, Chinese or Western. Only the Western anticoagulant classes present in the register are matched here; herbal preparations are not."
+      "limits": "The warning refers to medicines with anticoagulant action, Chinese or Western. Only the Western anticoagulant classes present in the register are matched here; herbal preparations are not.",
+      "limitsZh": "警語所指為具抗凝血作用的中西藥品。此處只比對登記中可辨識的西藥抗凝血類別,不含中草藥。"
     },
     {
       "id": "TFDA-HF-GI",
@@ -63,13 +84,24 @@
       "verbatim": "This product's regulator-approved warning names gastrointestinal conditions among those for which it should not be taken, and the person's record includes peptic ulcer or gastrointestinal bleeding.",
       "when": {
         "allOf": [
-          { "officialWarningMentionsAnyOf": ["胃潰瘍", "十二指腸潰瘍", "腸胃道出血"] },
-          { "conditionAnyOf": ["peptic_ulcer_or_gi_bleed"] }
+          {
+            "officialWarningMentionsAnyOf": [
+              "胃潰瘍",
+              "十二指腸潰瘍",
+              "腸胃道出血"
+            ]
+          },
+          {
+            "conditionAnyOf": [
+              "peptic_ulcer_or_gi_bleed"
+            ]
+          }
         ]
       },
       "severity": "consult_pharmacist",
       "category": "supplement_contraindication",
-      "limits": "Matched on terms in the approved warning text, not on a clinical assessment."
+      "limits": "Matched on terms in the approved warning text, not on a clinical assessment.",
+      "limitsZh": "比對的是核可警語文字中出現的詞,不是對這個人的臨床評估。"
     }
   ],
   "notEncoded": {

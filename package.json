@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "ingest": "node scripts/ingest-tfda.mts"
+    "ingest": "node scripts/ingest-tfda.mts",
+    "verify": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "next": "16.2.12",

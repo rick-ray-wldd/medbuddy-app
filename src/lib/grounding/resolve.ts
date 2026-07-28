@@ -123,7 +123,7 @@ export class Resolver {
     return unresolved(inputText, source, "no_match");
   }
 
-  private searchContains<T extends { key: string }>(
+  private searchContains<T extends { key: string; permit: string }>(
     index: Map<string, T[]>,
     key: string,
   ): T[] {

@@ -153,15 +153,69 @@ export default function CheckClient({ subjects }: { subjects: SeededSubject[] })
               void run(a);
             }}
           />
-          <a
-            href={`/summary/${subject.id}`}
-            className="inline-block rounded-lg border border-neutral-900 px-5 py-2.5 font-medium dark:border-neutral-100"
-          >
-            產生回診單 →
-          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href={`/summary/${subject.id}`}
+              className="inline-block rounded-lg border border-neutral-900 px-5 py-2.5 font-medium dark:border-neutral-100"
+            >
+              產生回診單 →
+            </a>
+            <SendToLine subjectId={subject.id} itemsText={text} />
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The caregiver-initiated LINE delivery (the one sanctioned outbound). The
+ * server re-runs the pipeline and sends the elder-audience narration — this
+ * button carries the subject and items, never composed text.
+ */
+function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "sent" | "failed">("idle");
+  const [reason, setReason] = useState<string | null>(null);
+
+  async function send() {
+    setState("busy");
+    setReason(null);
+    try {
+      const res = await fetch("/api/line/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId,
+          items: parseLines(itemsText),
+          audience: "elder",
+        }),
+      });
+      const data = (await res.json()) as { delivery?: { ok: boolean; reason?: string } };
+      if (res.ok && data.delivery?.ok) {
+        setState("sent");
+      } else {
+        setState("failed");
+        setReason(data.delivery?.reason ?? `伺服器回應 ${res.status}`);
+      }
+    } catch {
+      setState("failed");
+      setReason("連線失敗");
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        onClick={send}
+        disabled={state === "busy"}
+        className="rounded-lg border border-neutral-900 px-5 py-2.5 font-medium disabled:opacity-50 dark:border-neutral-100"
+      >
+        {state === "busy" ? "傳送中…" : state === "sent" ? "已傳到 LINE ✓" : "傳到 LINE"}
+      </button>
+      {state === "failed" && (
+        <span className="text-sm text-red-600">傳送失敗:{reason}</span>
+      )}
+    </span>
   );
 }
 

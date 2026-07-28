@@ -34,12 +34,70 @@ medication bot would normally do. It is the constraint, not an omission.
 
 ---
 
-## 1. One bot, two rich menus
+## 1. First contact: who is holding this phone
+
+When someone adds the bot we do not know which of the two people they are, and
+the whole interface depends on the answer. So it is asked exactly once, and
+then never again.
+
+```
+┌───────────────────────────────────────┐
+│  MedBuddy                             │
+│  幫忙看懂家裡的藥                        │
+├───────────────────────────────────────┤
+│                                       │
+│   ┌─────────────────────────────┐     │
+│   │  💊  我要看我自己的藥         │     │
+│   └─────────────────────────────┘     │
+│                                       │
+│   ┌─────────────────────────────┐     │
+│   │  👨‍👩‍👧  我要幫家人看藥          │     │
+│   └─────────────────────────────┘     │
+│                                       │
+└───────────────────────────────────────┘
+```
+
+### Framed by what they want, not by who they are
+
+**「我要看我自己的藥」, not 「我是長輩」.** Asking a 72-year-old to tap a button
+that categorises him as the old person is a small humiliation at the first
+screen, and the first screen is where products lose people. Both options
+describe an intention, which everyone can answer without conceding anything.
+
+### It is a binding, not a mode
+
+The answer sets that LINE user's rich menu **permanently**. It is a property of
+the person, not of the session:
+
+- The elder is never asked again, and cannot switch. He should not have to
+  identify himself repeatedly, and he must not be able to tap into a surface
+  showing what his family reported about him.
+- The caregiver can change it later from their own menu — they may be setting
+  up a parent's phone and their own.
+
+Postback actions carry the choice, so the answer does not appear in the thread
+as a message he has to see or scroll past.
+
+### Two people, one phone
+
+The in-person setup in §4 assumes the caregiver is holding the elder's phone.
+So the caregiver will answer this card **twice** — once on each device — and
+the elder may never see it at all. That is the intended path, not a
+workaround: he cannot onboard himself, and the design says so rather than
+hoping.
+
+---
+
+## 1b. One bot, two rich menus
 
 LINE assigns a rich menu **per user**, so the same channel presents a different
 interface to each role. That is how "one record, three projections" is
 expressed here — and the clinician, who is not a LINE participant at all, is
 simply absent.
+
+Switching between them uses the same mechanism LINE bots already use for a
+副選單 — the pattern is well-trodden; what is unusual here is that the two
+menus belong to two *people* rather than two sections.
 
 ### Elder — a 2×2 menu, four large targets
 
@@ -70,6 +128,14 @@ words, which is his choice rather than our question.
 in LINE has to be tapped to play, and a tap that misses scrolls the thread
 instead. A permanent button that replays the last explanation removes the need
 to find the bubble again.
+
+**Icons beside every label.** Health-account rich menus in Taiwan carry an icon
+per cell, and the reason is not decoration: an icon is recognised faster than a
+string, which matters most for the reader who is slowest at the string.
+
+**There is no 回主選單 on the elder's menu** — a common pattern, and unnecessary
+here because his menu has no second level to get lost in. Four cells, all at the
+top. Depth is the thing to spend on a caregiver and refuse an elder.
 
 ### Caregiver — a 2×3 menu, and links are allowed
 
@@ -147,6 +213,7 @@ easy to add by accident because LINE makes it convenient.
 | Use 疊字 or 「囉」「喔」 | A product that treats him as declining may make that true |
 | Reply to a message it does not understand | Silence beats a guessed answer. An unmapped sender gets nothing at all |
 | Show him another person's information | A carer may hold twelve residents |
+| Ask him to pick his symptoms from a list | Selecting from a symptom grid is reporting on himself; other health bots lead with it, and it is the same trap as an adherence check-in wearing a different hat. He asks; the caregiver reports |
 
 ---
 
@@ -211,8 +278,15 @@ content, and editing it would defeat the purpose.
 **Built:** inbound text → pipeline → reply; outbound caregiver-initiated
 delivery; audio hosting; signature, dedupe, verbatim delivery, link refusal.
 
-**Not built:** every rich menu, quick reply and LIFF surface above; the pairing
-flow; 再唸一次; 找家人; STT for inbound voice.
+**Not built:** the role card and every rich menu, quick reply and LIFF surface
+above; the pairing flow; 再唸一次; 找家人; STT for inbound voice.
+
+**Account verification is a prerequisite, not a polish item.** An unverified
+LINE official account displays a banner above every conversation warning the
+user to be careful about providing personal information. On an account whose
+users are older adults — the population most targeted by fraud, and whose trust
+this product spends real design effort earning — that banner argues against us
+in our own thread. Verification has to happen before anyone real is invited.
 
 This is a design specification, not a description of the product. Everything in
 it follows from constraints established in `docs/PRD.md` §3.2 and

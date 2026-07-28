@@ -58,6 +58,19 @@ export function validateNarration(
   const violations: Violation[] = [];
   const all = narration.segments.map((s) => s.text).join("\n");
 
+  /**
+   * The dose and change checks police what we wrote, not what we quoted.
+   *
+   * STOPP E4 reads "NSAID's if eGFR < 50 ml/min/1.73m2" — a faithful quote
+   * contains "50 ml" and would be rejected for being faithful. Quoted segments
+   * are already constrained by the stronger check below: they must appear in
+   * the verdict character for character.
+   */
+  const ourOwnWords = narration.segments
+    .filter((s) => s.kind !== "verified")
+    .map((s) => s.text)
+    .join("\n");
+
   // 1. Whose medications this is about, always. A carer may hold twelve people.
   if (!all.includes(verdict.subject.displayName)) {
     violations.push({
@@ -104,21 +117,24 @@ export function validateNarration(
   }
 
   // 5–6. No dosing, no stopping or swapping. Both are a prescriber's decisions.
-  if (DOSE_PATTERN.test(all)) {
-    violations.push({ code: "dose_instruction", detail: firstMatch(all, DOSE_PATTERN) });
+  if (DOSE_PATTERN.test(ourOwnWords)) {
+    violations.push({
+      code: "dose_instruction",
+      detail: firstMatch(ourOwnWords, DOSE_PATTERN),
+    });
   }
-  if (CHANGE_PATTERN.test(all)) {
+  if (CHANGE_PATTERN.test(ourOwnWords)) {
     violations.push({
       code: "stop_or_change_instruction",
-      detail: firstMatch(all, CHANGE_PATTERN),
+      detail: firstMatch(ourOwnWords, CHANGE_PATTERN),
     });
   }
 
   // 7. No claims about what the person did.
-  if (PAST_BEHAVIOUR_PATTERN.test(all)) {
+  if (PAST_BEHAVIOUR_PATTERN.test(ourOwnWords)) {
     violations.push({
       code: "asserts_past_behaviour",
-      detail: firstMatch(all, PAST_BEHAVIOUR_PATTERN),
+      detail: firstMatch(ourOwnWords, PAST_BEHAVIOUR_PATTERN),
     });
   }
 

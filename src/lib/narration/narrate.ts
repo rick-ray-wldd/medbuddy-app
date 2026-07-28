@@ -21,36 +21,68 @@ export type NarrationOutcome = {
   rejected?: { producedBy: Narration["producedBy"]; violations: Violation[] };
   /** True when we fell back. Surfaced rather than hidden. */
   usedFallback: boolean;
+  /**
+   * Violations in the fallback itself.
+   *
+   * The template narrator failing its own checks is a defect in this
+   * repository, not a runtime condition — there is a test asserting it never
+   * happens. If it reaches production anyway, the caller has to know rather
+   * than render text nothing vouched for. Carried out rather than swallowed.
+   */
+  fallbackViolations?: Violation[];
 };
+
+/**
+ * Produce the fallback and check it too.
+ *
+ * The docstring in validate.ts promises the same checks run whichever narrator
+ * wrote the text. Running them only on the model's output would have made that
+ * a claim rather than a guarantee.
+ */
+async function verifiedFallback(
+  verdict: Verdict,
+  audience: NarrationAudience,
+): Promise<{ narration: Narration; violations?: Violation[] }> {
+  const narration = await new DeterministicNarrator().narrate(verdict, audience);
+  const result = validateNarration(narration, verdict);
+  return result.ok ? { narration } : { narration, violations: result.violations };
+}
 
 export async function narrate(
   verdict: Verdict,
   audience: NarrationAudience,
   preferred: Narrator | null,
 ): Promise<NarrationOutcome> {
-  const fallback = new DeterministicNarrator();
-
   if (preferred) {
     try {
       const candidate = await preferred.narrate(verdict, audience);
       const result = validateNarration(candidate, verdict);
       if (result.ok) return { narration: candidate, usedFallback: false };
 
+      const fallback = await verifiedFallback(verdict, audience);
       return {
-        narration: await fallback.narrate(verdict, audience),
+        narration: fallback.narration,
         rejected: { producedBy: candidate.producedBy, violations: result.violations },
         usedFallback: true,
+        fallbackViolations: fallback.violations,
       };
     } catch {
       // A model that is unreachable, slow, or returns something unparseable is
       // the same situation as one that failed validation: use the text we can
       // vouch for.
+      const fallback = await verifiedFallback(verdict, audience);
       return {
-        narration: await fallback.narrate(verdict, audience),
+        narration: fallback.narration,
         usedFallback: true,
+        fallbackViolations: fallback.violations,
       };
     }
   }
 
-  return { narration: await fallback.narrate(verdict, audience), usedFallback: false };
+  const fallback = await verifiedFallback(verdict, audience);
+  return {
+    narration: fallback.narration,
+    usedFallback: false,
+    fallbackViolations: fallback.violations,
+  };
 }

@@ -121,15 +121,14 @@ function elderSegments(verdict: Verdict): Segment[] {
   const name = verdict.subject.displayName;
 
   const explained = verdict.items.filter((i) => i.resolved && i.indications);
-  if (explained.length === 0) {
-    segments.push({
-      kind: "explained",
-      text: `${name}好,目前還沒有可以說明的藥品資料。`,
-    });
-    return segments;
-  }
 
-  segments.push({ kind: "explained", text: `${name}好,這是您現在在吃的藥。` });
+  segments.push({
+    kind: "explained",
+    text:
+      explained.length === 0
+        ? `${name}好,目前還沒有可以說明的藥品資料。`
+        : `${name}好,這是您現在在吃的藥。`,
+  });
 
   for (const item of explained) {
     if (!item.resolved) continue;

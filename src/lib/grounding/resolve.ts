@@ -71,7 +71,14 @@ function isAmbiguous(records: { ingredients?: string[]; nameZh: string }[]): boo
   return shapes.size > 1;
 }
 
-/** Below this length a "contains" match means almost nothing. */
+/**
+ * Below this length a "contains" match means almost nothing — in either
+ * direction.
+ *
+ * The register holds product keys of one and two characters. Without a floor on
+ * the candidate as well as on the input, any sentence containing those two
+ * characters would "identify" that product.
+ */
 const MIN_SUBSTRING_LENGTH = 3;
 
 export class Resolver {
@@ -138,7 +145,10 @@ export class Resolver {
   >(index: Map<string, T[]>, key: string): T[] {
     const hits: T[] = [];
     for (const [candidateKey, records] of index) {
-      if (candidateKey.includes(key) || key.includes(candidateKey)) {
+      const forward = candidateKey.includes(key);
+      const reverse =
+        candidateKey.length >= MIN_SUBSTRING_LENGTH && key.includes(candidateKey);
+      if (forward || reverse) {
         hits.push(...records);
         // Stop early: once the candidates disagree about what they contain the
         // answer is ambiguous however many more there are, and the registers

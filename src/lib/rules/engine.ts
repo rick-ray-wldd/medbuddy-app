@@ -33,8 +33,12 @@ export type Evaluation = {
   findings: Finding[];
   /** Which rule sets ran, at which version. A past check must be reproducible. */
   ruleSetVersions: { id: string; version: string; retrievedAt: string }[];
-  /** Rule sets skipped because the person is below their age scope. */
-  skippedRuleSets: { id: string; reason: string }[];
+  /**
+   * Rule sets skipped because the person is below their age scope. Carries the
+   * version too: reproducing a past check means knowing what was skipped as
+   * well as what ran.
+   */
+  skippedRuleSets: { id: string; version: string; reason: string }[];
 };
 
 /**
@@ -185,6 +189,7 @@ export function evaluateRules(
     if (age !== undefined && age < ruleSet.appliesFromAge) {
       skippedRuleSets.push({
         id: ruleSet.id,
+        version: ruleSet.version,
         reason: `applies from age ${ruleSet.appliesFromAge}; subject is ${age}`,
       });
       continue;

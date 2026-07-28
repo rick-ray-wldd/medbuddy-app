@@ -17,15 +17,20 @@ verdict/     the single object that carries every clinical judgement
       │
       ▼
 narration/   translate a verdict into plain language
-             receives ONLY the verdict — never the raw drug data
+             receives ONLY the verdict — it cannot query the registers
 ```
 
 ## The load-bearing rule
 
 **Clinical judgement ends at `verdict/`.** Everything downstream of it is
-presentation. The model in `narration/` cannot reach the drug data, so it
-cannot invent a finding — and because its input is a fixed object, its output
-can be asserted against that object in tests.
+presentation.
+
+The verdict does carry register-derived fields — ingredients, indications, a
+product's approved warning — because narration has to be able to say what a
+medicine is for. What narration cannot do is *look anything up*: it has no
+access to the registers or the rule sets, so it cannot introduce a medicine, a
+criterion, or a warning that the verdict did not already contain. Its input is
+a fixed object, so its output is asserted against that object in tests.
 
 `rules/` holds no medication knowledge of its own; it interprets the shape of
 whatever is in `config/rules/`. Adding a rule set means adding a file there,

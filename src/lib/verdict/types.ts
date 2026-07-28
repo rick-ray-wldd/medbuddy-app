@@ -28,7 +28,7 @@ export type VerdictSubject = {
 export type VerdictProvenance = {
   registers: { drugs: string; healthFoods: string };
   ruleSets: { id: string; version: string; retrievedAt: string }[];
-  skippedRuleSets: { id: string; reason: string }[];
+  skippedRuleSets: { id: string; version: string; reason: string }[];
 };
 
 /**

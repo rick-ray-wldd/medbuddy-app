@@ -42,12 +42,14 @@ rules/       deterministic evaluation against versioned rule sets
 verdict/     the single object carrying every clinical judgement
       ↓
 narration/   translate a verdict into plain language —
-             receives ONLY the verdict, never the raw drug data
+             receives ONLY the verdict; cannot query the registers
 ```
 
-**Clinical judgement ends at the verdict object.** The model cannot reach the
-drug data, so it cannot invent a finding; and because its input is a fixed
-object, its output is asserted against that object in tests.
+**Clinical judgement ends at the verdict object.** The verdict carries the
+register fields narration needs to say what a medicine is for, but narration
+cannot look anything up — so it cannot introduce a medicine, a criterion or a
+warning the verdict did not already contain. Its input is a fixed object, so
+its output is asserted against that object in tests.
 
 Rule sets are committed JSON under `config/rules/`, not database rows, so every
 change to a medication-safety rule is diffable and reviewable.

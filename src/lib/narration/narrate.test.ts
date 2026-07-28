@@ -128,6 +128,80 @@ describe("the deterministic narrator", () => {
   });
 });
 
+describe("the fallback must survive every shape of verdict", () => {
+  // The review found this: a test named for both audiences only ever ran one
+  // verdict shape, so the elder branch that skipped coverage disclosure was
+  // never reached. These enumerate the shapes instead of assuming them.
+  const shapes: [string, () => Verdict][] = [
+    ["findings and an unidentified item", () => fatherVerdict()],
+    [
+      "nothing identifiable at all",
+      () =>
+        buildVerdict(
+          father,
+          resolver.resolveAll([
+            { text: "阿姨推薦的魚油", source: "supplement" },
+            { text: "巷口買的維他命", source: "supplement" },
+          ]),
+          ruleSets,
+          classes,
+        ),
+    ],
+    ["an empty submission", () => buildVerdict(father, resolver.resolveAll([]), ruleSets, classes)],
+    [
+      "everything identified and nothing to raise",
+      () =>
+        buildVerdict(
+          { ...father, conditions: [] },
+          resolver.resolveAll([{ text: paracetamolName(), source: "otc" }]),
+          ruleSets,
+          classes,
+        ),
+    ],
+  ];
+
+  for (const [label, make] of shapes) {
+    for (const audience of ["caregiver", "elder"] as NarrationAudience[]) {
+      it(`passes its own checks: ${label}, ${audience}`, async () => {
+        const verdict = make();
+        const outcome = await narrate(verdict, audience, null);
+        // narrate() validates the fallback too, and reports rather than hides
+        // a failure. Nothing here should ever produce one.
+        expect(outcome.fallbackViolations).toBeUndefined();
+        expect(validateNarration(outcome.narration, verdict)).toEqual({ ok: true });
+      });
+    }
+  }
+});
+
+describe("quoting a source that looks like an instruction", () => {
+  it("does not reject a criterion for containing a measurement", async () => {
+    // STOPP E4 reads "NSAID's if eGFR < 50 ml/min/1.73m2". A faithful quote
+    // contains "50 ml"; rejecting it would punish the narration for being
+    // faithful. The dose check polices what we wrote, not what we quoted.
+    const kidneys: VerdictSubject = {
+      id: "subj-kidneys",
+      displayName: "陳女士",
+      ageYears: 84,
+      conditions: ["ckd_egfr_under_50"],
+    };
+    const nsaid = registers.drugs.drugs.find(
+      (d) => d.ingredients.length === 1 && d.ingredients[0].includes("IBUPROFEN"),
+    )!;
+    const verdict = buildVerdict(
+      kidneys,
+      resolver.resolveAll([{ text: nsaid.nameZh, source: "otc" }]),
+      ruleSets,
+      classes,
+    );
+
+    expect(verdict.findings.some((f) => f.ruleId === "STOPP-E4")).toBe(true);
+    const outcome = await narrate(verdict, "caregiver", null);
+    expect(outcome.fallbackViolations).toBeUndefined();
+    expect(validateNarration(outcome.narration, verdict)).toEqual({ ok: true });
+  });
+});
+
 describe("what the checks reject", () => {
   it("a medicine that is not in the verdict", async () => {
     const verdict = fatherVerdict();

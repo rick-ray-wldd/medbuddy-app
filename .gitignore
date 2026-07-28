@@ -48,3 +48,4 @@ data/img/
 *.jpeg
 *.png
 !public/**
+.env.local

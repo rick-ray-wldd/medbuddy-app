@@ -157,4 +157,41 @@ building that adapter. The spec fixes a path boundary
 unambiguous, states that the adapter carries no medical logic, and gives the
 reason behind each safety constraint rather than just the rule.
 
+### H24–H30 — reviewed, and it found real holes
+
+Ran a two-axis review (repo standards, and the code against the brief) as
+parallel sub-agents. Between them they found four things worth the time, all in
+what the product claims hardest:
+
+- **The fallback narration was never validated.** A docstring said the same
+  checks run whichever narrator wrote the text; the code ran them only on the
+  model's output. A concrete case failed — elder audience with nothing
+  identifiable took an early return that skipped coverage disclosure. An
+  invariant asserted in a comment and not enforced in code.
+- **The dose check rejected the regulator's own words.** STOPP E4 reads
+  "NSAID's if eGFR < 50 ml/min/1.73m2"; a faithful quote contains "50 ml".
+- **Fluent prose was unchecked.** Validation looked at quoted segments and
+  【】-marked names and nothing else, so a verdict holding only paracetamol
+  accepted a sentence about aspirin and a bleeding risk nobody evaluated. The
+  fix turned on a distinction I had missed: the narrator may not reach the
+  registers, but the validator may — and must, because detecting invention
+  needs exactly the knowledge the narrator is denied.
+- **The resolver turned longer names into shorter ones.** 新理眠錠 → 理眠錠
+  (NITRAZEPAM), fabricating a benzodiazepine finding with a real permit and a
+  verbatim criterion attached. Reverse substring matching is now confined to
+  health foods.
+
+The sharpest finding was about a test rather than the code: an it.each over two
+audiences that only ever built one verdict shape, so the failing branch was
+never reached. That is the same lesson as the type error earlier — a green
+suite says nothing about what the green covers.
+
+**What broke, end to end.** The clinician summary reported no history at all
+after two checks had been recorded. Next bundles route handlers and server
+components separately, so the module-scoped registry singleton was instantiated
+twice and each copy got its own store. Moved it onto globalThis. The registers
+being loaded twice would have cost only memory; the log being two logs makes a
+feature look built when it is not — and only walking the flow the way a user
+does would have caught it.
+
 <!-- append below, newest at the bottom -->

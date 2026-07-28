@@ -15,20 +15,40 @@ import {
   buildKnownMedicineIndex,
   type KnownMedicineIndex,
 } from "./narration/validate";
+import { InMemoryLogStore } from "./log/memory-store";
+import type { LogStore } from "./log/types";
 
 function read<T>(...segments: string[]): T {
   return JSON.parse(readFileSync(path.join(process.cwd(), ...segments), "utf8")) as T;
 }
 
-let cached: {
+type Registry = {
   resolver: Resolver;
   registers: Registers;
   ruleSets: RuleSet[];
   classes: DrugClasses;
   knownMedicines: KnownMedicineIndex;
-} | null = null;
+  logStore: LogStore;
+};
 
-export function getRegistry() {
+/**
+ * Held on globalThis rather than in a module-level variable.
+ *
+ * Next bundles route handlers and server components separately, so a
+ * module-scoped singleton is instantiated more than once and each copy gets
+ * its own store. Found by walking the flow end to end: two checks were
+ * recorded through /api/check and the summary page reported no history at all.
+ *
+ * The registers being loaded twice would only have cost memory. The log being
+ * two different logs is the kind of bug that makes a feature look built when
+ * it is not.
+ */
+const GLOBAL_KEY = Symbol.for("medbuddy.registry");
+type GlobalWithRegistry = typeof globalThis & { [GLOBAL_KEY]?: Registry };
+
+export function getRegistry(): Registry {
+  const g = globalThis as GlobalWithRegistry;
+  const cached = g[GLOBAL_KEY];
   if (cached) return cached;
 
   const registers: Registers = {
@@ -36,7 +56,7 @@ export function getRegistry() {
     healthFoods: read("data", "tfda-health-foods.json"),
   };
 
-  cached = {
+  const built: Registry = {
     registers,
     resolver: new Resolver(registers),
     ruleSets: [
@@ -50,7 +70,12 @@ export function getRegistry() {
       drugs: registers.drugs.drugs,
       healthFoods: registers.healthFoods.healthFoods,
     }),
+    // In memory for this build, and honest about it: a restart loses
+    // everything. Everything above it is written against LogStore, so
+    // replacing it with Postgres changes this line and nothing else.
+    logStore: new InMemoryLogStore(),
   };
 
-  return cached;
+  g[GLOBAL_KEY] = built;
+  return built;
 }

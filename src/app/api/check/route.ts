@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const submitted = (body.items ?? []).filter((i) => i.text.trim().length > 0);
   const audience: NarrationAudience = body.audience === "elder" ? "elder" : "caregiver";
 
-  const { resolver, ruleSets, classes, knownMedicines } = getRegistry();
+  const { resolver, ruleSets, classes, knownMedicines, logStore } = getRegistry();
 
   const verdict = buildVerdict(
     {
@@ -53,6 +53,18 @@ export async function POST(request: Request) {
   // route. The seam is here: pass a Narrator and its output is validated
   // against the verdict before it is returned, and rejected if it deviates.
   const outcome = await narrate(verdict, audience, null, knownMedicines);
+
+  // Every check becomes a point in the record. The signal a clinician can use
+  // is the change between captures, and there is no change without a history.
+  const capturedAt = new Date().toISOString();
+  await logStore.appendSnapshot({
+    id: `${subject.id}:${capturedAt}`,
+    subjectId: subject.id,
+    capturedAt,
+    capturedByCarerId: "carer-demo",
+    items: verdict.items,
+    verdict,
+  });
 
   return NextResponse.json({
     verdict,

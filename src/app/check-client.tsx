@@ -132,16 +132,92 @@ export default function CheckClient({ subjects }: { subjects: SeededSubject[] })
       </section>
 
       {result && (
-        <Result
+        <>
+          <Observe subjectId={subject.id} />
+          <Result
           data={result}
           audience={audience}
-          onAudience={(a) => {
-            setAudience(a);
-            void run(a);
-          }}
-        />
+            onAudience={(a) => {
+              setAudience(a);
+              void run(a);
+            }}
+          />
+          <a
+            href={`/summary/${subject.id}`}
+            className="inline-block rounded-lg border border-neutral-900 px-5 py-2.5 font-medium dark:border-neutral-100"
+          >
+            產生回診單 →
+          </a>
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * Somewhere to put what the family noticed.
+ *
+ * There is no equivalent for the older adult, and that is the design: he is
+ * never asked to confirm or deny anything, so an observation has one possible
+ * author.
+ */
+function Observe({ subjectId }: { subjectId: string }) {
+  const [note, setNote] = useState("");
+  const [kind, setKind] = useState("symptom");
+  const [saved, setSaved] = useState<string | null>(null);
+
+  async function save() {
+    if (!note.trim()) return;
+    const res = await fetch("/api/observation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subjectId, kind, note }),
+    });
+    if (res.ok) {
+      setSaved(note.trim());
+      setNote("");
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <h3 className="mb-2 font-medium">你注意到什麼</h3>
+      <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+        會出現在回診單上。用你自己的話寫,越具體越有用 ——
+        「上樓梯到二樓開始喘」比「最近比較累」醫師更用得上。
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+          className="rounded-lg border border-neutral-300 bg-transparent px-3 py-2 dark:border-neutral-700"
+        >
+          <option value="symptom">症狀</option>
+          <option value="self_medication">自行用藥</option>
+          <option value="alcohol">飲酒</option>
+          <option value="missed_dose">漏服</option>
+          <option value="other">其他</option>
+        </select>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void save()}
+          placeholder="晚上腰痛,自己拿了櫃子裡的止痛藥"
+          className="min-w-[16rem] flex-1 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-300"
+        />
+        <button
+          onClick={() => void save()}
+          className="rounded-lg border border-neutral-900 px-4 py-2 dark:border-neutral-100"
+        >
+          記錄
+        </button>
+      </div>
+      {saved && (
+        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+          已記錄:{saved}
+        </p>
+      )}
+    </section>
   );
 }
 

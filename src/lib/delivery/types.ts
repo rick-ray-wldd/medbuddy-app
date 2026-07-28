@@ -46,6 +46,17 @@ export type DeliveryMessage = {
   text: string;
   /** When present, also deliver as speech. */
   speech?: SpeechPayload;
+  /**
+   * When present, also deliver as an image, from a publicly reachable HTTPS
+   * URL.
+   *
+   * An image is not a link, which is the only reason one may be sent to an
+   * older adult at all. The case this exists for is the QR code carrying his
+   * clinician summary: he does not open it, he holds it up to a doctor. An
+   * adapter must still refuse a *link* in `text` for an elder — that rule is
+   * untouched.
+   */
+  imageUrl?: string;
 };
 
 export type DeliveryResult =

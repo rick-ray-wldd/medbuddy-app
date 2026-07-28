@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medbuddy.example/schemas/medication-bag-extraction.v1.json",
+  "title": "MedBuddy medication-bag extraction v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "provider",
+    "document",
+    "medications",
+    "unassignedVisibleText",
+    "review"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "medbuddy.medication-bag-extraction.v1"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "model", "completedAt"],
+      "properties": {
+        "name": { "const": "anthropic" },
+        "model": { "type": "string", "minLength": 1 },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "status",
+        "imageIds",
+        "qualityIssues",
+        "visibleMedicationRowCount",
+        "patientIdentifyingTextDetected",
+        "provenance"
+      ],
+      "properties": {
+        "kind": {
+          "enum": ["medication_bag", "mixed_documents", "unknown_document"]
+        },
+        "status": {
+          "enum": ["ready_for_review", "needs_better_image", "no_medication_table"]
+        },
+        "imageIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "qualityIssues": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "blur",
+              "glare",
+              "perspective",
+              "cropped_text",
+              "low_resolution",
+              "handwriting",
+              "overlap",
+              "multiple_documents"
+            ]
+          }
+        },
+        "visibleMedicationRowCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patientIdentifyingTextDetected": {
+          "type": "boolean"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "medications": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/medicationRow" }
+    },
+    "unassignedVisibleText": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["imageId", "text", "locationHint", "reason"],
+        "properties": {
+          "imageId": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "locationHint": { "type": "string", "minLength": 1 },
+          "reason": {
+            "enum": ["row_association_unclear", "label_unmapped", "partially_legible"]
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["needsHumanReview", "reasons", "criticalRowIds"],
+      "properties": {
+        "needsHumanReview": { "const": true },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ocr_requires_confirmation",
+              "critical_field_unclear",
+              "row_count_unreconciled",
+              "image_quality",
+              "conflicting_text",
+              "no_medication_table"
+            ]
+          }
+        },
+        "criticalRowIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "status", "evidence", "imageId", "locationHint"],
+      "properties": {
+        "value": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "enum": ["observed", "partially_legible", "not_visible", "conflicting"]
+        },
+        "evidence": {
+          "type": ["string", "null"]
+        },
+        "imageId": {
+          "type": ["string", "null"]
+        },
+        "locationHint": {
+          "type": ["string", "null"]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "observed" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": { "type": "string", "minLength": 1 },
+              "evidence": { "type": "string", "minLength": 1 },
+              "imageId": { "type": "string", "minLength": 1 },
+              "locationHint": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "not_visible" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "value": { "type": "null" },
+              "evidence": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["institutionName", "department", "prescriptionDate", "dispensingDate"],
+      "properties": {
+        "institutionName": { "$ref": "#/$defs/field" },
+        "department": { "$ref": "#/$defs/field" },
+        "prescriptionDate": { "$ref": "#/$defs/field" },
+        "dispensingDate": { "$ref": "#/$defs/field" }
+      }
+    },
+    "medicationRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rowId",
+        "rowIndex",
+        "printedName",
+        "strength",
+        "dosePerAdministration",
+        "frequency",
+        "route",
+        "timing",
+        "duration",
+        "quantity",
+        "instructions",
+        "needsHumanReview",
+        "reviewReasons"
+      ],
+      "properties": {
+        "rowId": { "type": "string", "minLength": 1 },
+        "rowIndex": { "type": "integer", "minimum": 0 },
+        "printedName": { "$ref": "#/$defs/field" },
+        "strength": { "$ref": "#/$defs/field" },
+        "dosePerAdministration": { "$ref": "#/$defs/field" },
+        "frequency": { "$ref": "#/$defs/field" },
+        "route": { "$ref": "#/$defs/field" },
+        "timing": { "$ref": "#/$defs/field" },
+        "duration": { "$ref": "#/$defs/field" },
+        "quantity": { "$ref": "#/$defs/field" },
+        "instructions": { "$ref": "#/$defs/field" },
+        "needsHumanReview": { "const": true },
+        "reviewReasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mandatory_confirmation",
+              "printed_name_unclear",
+              "strength_unclear",
+              "dose_unclear",
+              "frequency_unclear",
+              "route_unclear",
+              "timing_unclear",
+              "row_association_unclear",
+              "conflicting_text"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

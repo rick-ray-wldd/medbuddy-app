@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "medbuddy.medication-bag-gold.v1",
+  "imageId": "img-gold-demo",
+  "syntheticExample": true,
+  "containsPatientIdentifiers": false,
+  "annotation": {
+    "annotatorA": "reviewer-a",
+    "annotatorB": "reviewer-b",
+    "adjudicatedBy": "reviewer-c",
+    "annotatedAt": "2026-07-29T15:30:00.000Z"
+  },
+  "visibleMedicationRowCount": 2,
+  "rows": [
+    {
+      "rowId": "row-1",
+      "rowIndex": 0,
+      "fields": {
+        "printedName": {
+          "goldValue": "普拿疼膜衣錠500毫克",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "普拿疼膜衣錠500毫克",
+          "annotatorBValue": "普拿疼膜衣錠500毫克",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "strength": {
+          "goldValue": "500毫克",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "500毫克",
+          "annotatorBValue": "500毫克",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "dosePerAdministration": {
+          "goldValue": "1錠",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "1錠",
+          "annotatorBValue": "1錠",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "frequency": {
+          "goldValue": "每日3次",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "每日3次",
+          "annotatorBValue": "每日3次",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "route": {
+          "goldValue": "口服",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "口服",
+          "annotatorBValue": "口服",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "timing": {
+          "goldValue": "飯後",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "飯後",
+          "annotatorBValue": "飯後",
+          "disagreement": false,
+          "adjudicationNote": null
+        }
+      }
+    },
+    {
+      "rowId": "row-2",
+      "rowIndex": 1,
+      "fields": {
+        "printedName": {
+          "goldValue": "使蒂諾斯膜衣錠10毫克",
+          "sourceLegibility": "partial",
+          "annotatorAValue": "使蒂諾斯膜衣錠10毫克",
+          "annotatorBValue": "使蒂諾斯膜衣錠10毫?",
+          "disagreement": true,
+          "adjudicationNote": "Reviewer C inspected the original high-resolution image; the final character is visible as 克."
+        },
+        "strength": {
+          "goldValue": "10毫克",
+          "sourceLegibility": "partial",
+          "annotatorAValue": "10毫克",
+          "annotatorBValue": "10毫?",
+          "disagreement": true,
+          "adjudicationNote": "Adjudicated from the original image, not from drug knowledge."
+        },
+        "dosePerAdministration": {
+          "goldValue": "1錠",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "1錠",
+          "annotatorBValue": "1錠",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "frequency": {
+          "goldValue": "睡前1次",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "睡前1次",
+          "annotatorBValue": "睡前1次",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "route": {
+          "goldValue": "口服",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "口服",
+          "annotatorBValue": "口服",
+          "disagreement": false,
+          "adjudicationNote": null
+        },
+        "timing": {
+          "goldValue": "睡前",
+          "sourceLegibility": "clear",
+          "annotatorAValue": "睡前",
+          "annotatorBValue": "睡前",
+          "disagreement": false,
+          "adjudicationNote": null
+        }
+      }
+    }
+  ]
+}

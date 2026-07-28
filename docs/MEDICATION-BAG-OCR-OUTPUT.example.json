@@ -1,0 +1,202 @@
+{
+  "schemaVersion": "medbuddy.medication-bag-extraction.v1",
+  "requestId": "ocr-demo-001",
+  "provider": {
+    "name": "anthropic",
+    "model": "configured-sonnet-vision-model",
+    "completedAt": "2026-07-29T15:00:00.000Z"
+  },
+  "document": {
+    "kind": "medication_bag",
+    "status": "ready_for_review",
+    "imageIds": ["img-demo-front"],
+    "qualityIssues": ["glare"],
+    "visibleMedicationRowCount": 2,
+    "patientIdentifyingTextDetected": true,
+    "provenance": {
+      "institutionName": {
+        "value": "範例醫院",
+        "status": "observed",
+        "evidence": "範例醫院",
+        "imageId": "img-demo-front",
+        "locationHint": "header, upper left"
+      },
+      "department": {
+        "value": "家庭醫學科",
+        "status": "observed",
+        "evidence": "家庭醫學科",
+        "imageId": "img-demo-front",
+        "locationHint": "header, upper centre"
+      },
+      "prescriptionDate": {
+        "value": "2026/07/28",
+        "status": "observed",
+        "evidence": "2026/07/28",
+        "imageId": "img-demo-front",
+        "locationHint": "header date field"
+      },
+      "dispensingDate": {
+        "value": null,
+        "status": "not_visible",
+        "evidence": null,
+        "imageId": null,
+        "locationHint": null
+      }
+    }
+  },
+  "medications": [
+    {
+      "rowId": "row-1",
+      "rowIndex": 0,
+      "printedName": {
+        "value": "普拿疼膜衣錠500毫克",
+        "status": "observed",
+        "evidence": "普拿疼膜衣錠500毫克",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, name column"
+      },
+      "strength": {
+        "value": "500毫克",
+        "status": "observed",
+        "evidence": "500毫克",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, name column"
+      },
+      "dosePerAdministration": {
+        "value": "1錠",
+        "status": "observed",
+        "evidence": "1錠",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, dose column"
+      },
+      "frequency": {
+        "value": "每日3次",
+        "status": "observed",
+        "evidence": "每日3次",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, frequency column"
+      },
+      "route": {
+        "value": "口服",
+        "status": "observed",
+        "evidence": "口服",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, route column"
+      },
+      "timing": {
+        "value": "飯後",
+        "status": "observed",
+        "evidence": "飯後",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, timing column"
+      },
+      "duration": {
+        "value": "3天",
+        "status": "observed",
+        "evidence": "3天",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, duration column"
+      },
+      "quantity": {
+        "value": "9錠",
+        "status": "observed",
+        "evidence": "9錠",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 1, quantity column"
+      },
+      "instructions": {
+        "value": null,
+        "status": "not_visible",
+        "evidence": null,
+        "imageId": null,
+        "locationHint": null
+      },
+      "needsHumanReview": true,
+      "reviewReasons": ["mandatory_confirmation"]
+    },
+    {
+      "rowId": "row-2",
+      "rowIndex": 1,
+      "printedName": {
+        "value": "使蒂諾斯膜衣錠10毫?",
+        "status": "partially_legible",
+        "evidence": "使蒂諾斯膜衣錠10毫?",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, name column under glare"
+      },
+      "strength": {
+        "value": "10毫?",
+        "status": "partially_legible",
+        "evidence": "10毫?",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, name column under glare"
+      },
+      "dosePerAdministration": {
+        "value": "1錠",
+        "status": "observed",
+        "evidence": "1錠",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, dose column"
+      },
+      "frequency": {
+        "value": "睡前1次",
+        "status": "observed",
+        "evidence": "睡前1次",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, frequency column"
+      },
+      "route": {
+        "value": "口服",
+        "status": "observed",
+        "evidence": "口服",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, route column"
+      },
+      "timing": {
+        "value": "睡前",
+        "status": "observed",
+        "evidence": "睡前",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, timing column"
+      },
+      "duration": {
+        "value": null,
+        "status": "not_visible",
+        "evidence": null,
+        "imageId": null,
+        "locationHint": null
+      },
+      "quantity": {
+        "value": "3錠",
+        "status": "observed",
+        "evidence": "3錠",
+        "imageId": "img-demo-front",
+        "locationHint": "medication table, row 2, quantity column"
+      },
+      "instructions": {
+        "value": null,
+        "status": "not_visible",
+        "evidence": null,
+        "imageId": null,
+        "locationHint": null
+      },
+      "needsHumanReview": true,
+      "reviewReasons": [
+        "mandatory_confirmation",
+        "printed_name_unclear",
+        "strength_unclear"
+      ]
+    }
+  ],
+  "unassignedVisibleText": [],
+  "review": {
+    "needsHumanReview": true,
+    "reasons": [
+      "ocr_requires_confirmation",
+      "critical_field_unclear",
+      "image_quality"
+    ],
+    "criticalRowIds": ["row-2"]
+  }
+}
+

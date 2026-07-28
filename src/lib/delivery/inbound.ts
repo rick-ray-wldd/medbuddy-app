@@ -31,12 +31,25 @@ export type InboundMessage = {
 };
 
 /**
- * DEMO mapping: which subject a LINE user may ask about. One known elder →
- * one subject. An unknown sender gets no reply at all — never a guessed
- * subject (§6.5: wrong-person findings are the worst error this product can
- * make) and never a composed "who are you?" (§6.4).
+ * DEMO mapping: which subject a LINE user may ask about. Known users only —
+ * an unknown sender gets no reply at all: never a guessed subject (§6.5:
+ * wrong-person findings are the worst error this product can make) and never
+ * a composed "who are you?" (§6.4).
+ *
+ * Sources, in order:
+ *   1. LINE_USER_SUBJECT_MAP — "Uaaa:subj-father,Ubbb:subj-mother"
+ *   2. LINE_ELDER_USER_ID (+ optional LINE_ELDER_SUBJECT_ID, default
+ *      subj-father) — the original single-elder demo pair
+ * Real product: this lookup belongs in a store Ray owns, not in env vars.
  */
 function subjectIdFor(channelUserId: string): string | null {
+  const map = process.env.LINE_USER_SUBJECT_MAP;
+  if (map) {
+    for (const pair of map.split(",")) {
+      const [userId, subjectId] = pair.split(":").map((s) => s.trim());
+      if (userId && subjectId && userId === channelUserId) return subjectId;
+    }
+  }
   if (
     process.env.LINE_ELDER_USER_ID &&
     channelUserId === process.env.LINE_ELDER_USER_ID

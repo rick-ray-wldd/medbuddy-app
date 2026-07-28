@@ -43,3 +43,42 @@ export const DEMO_VOICES: VoiceProfile[] = [SERIN_DEMO_VOICE];
 export function findDemoVoice(externalVoiceId: string): VoiceProfile | undefined {
   return DEMO_VOICES.find((v) => v.externalVoiceId === externalVoiceId);
 }
+
+/**
+ * The voice a deployment speaks with when a request does not name one.
+ *
+ * Returns nothing unless `MEDBUDDY_DEMO_VOICE_ID` is set, and that is the
+ * point: synthesising through Fish is the single place health information
+ * leaves this process, so a deployment that has not opted in must make no
+ * external call. Setting the variable is the opt-in; the TDD says so in those
+ * words and this function is what makes it true.
+ */
+export function defaultVoice(): VoiceProfile | undefined {
+  const id = process.env.MEDBUDDY_DEMO_VOICE_ID?.trim();
+  if (!id) return undefined;
+  return findDemoVoice(id) ?? unknownVoice(id);
+}
+
+/**
+ * A profile for an id we have no consent record for.
+ *
+ * It still works — an operator may legitimately point this at their own
+ * model — but the consent statement says plainly that this repository does
+ * not know whose voice it is, rather than inventing reassurance.
+ */
+function unknownVoice(externalVoiceId: string): VoiceProfile {
+  return {
+    id: `fish:${externalVoiceId}`,
+    subjectId: "",
+    displayName: "設定的語音",
+    provider: "fish",
+    externalVoiceId,
+    createdAt: "",
+    consent: {
+      statement:
+        "Configured by the operator via MEDBUDDY_DEMO_VOICE_ID. This repository " +
+        "holds no consent record for this voice.",
+      givenAt: "",
+    },
+  };
+}

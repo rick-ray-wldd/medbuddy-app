@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
  * cloned caregiver voice — is wired).
  *
  * Audio files are synthesised OFFLINE from exact narration texts and stored
- * at `line-audio/pre-{sha256(text)[0..24]}-{durationMs}.m4a`. At reply time
+ * at `line-audio/pre-{sha256(text)[0..24]}-{durationMs}.{m4a|mp3}`. At reply time
  * the narration's own hash is looked up: speech is attached ONLY when the
  * hashes match, which guarantees byte-for-byte that the voice says exactly
  * what the text says — an explanation that arrives altered is worse than one
@@ -21,7 +21,12 @@ export function narrationHash(text: string): string {
 
 export type PrerenderedSpeech = {
   audio: Uint8Array;
-  format: "m4a";
+  /**
+   * Both are accepted because the two renderers differ: an offline m4a batch,
+   * and Fish, which returns 128 kbps mp3. LineDelivery accepts either and
+   * refuses wav, so the format travels rather than being assumed.
+   */
+  format: "m4a" | "mp3";
   durationMs: number;
 };
 
@@ -35,12 +40,16 @@ export async function findPrerenderedSpeech(
     const { blobs } = await list({ prefix, limit: 1 });
     const blob = blobs[0];
     if (!blob) return undefined;
-    const match = blob.pathname.match(/-(\d+)\.m4a$/);
+    const match = blob.pathname.match(/-(\d+)\.(m4a|mp3)$/);
     if (!match) return undefined;
     const res = await get(blob.pathname, { access: "private" });
     if (!res || res.statusCode !== 200) return undefined;
     const audio = new Uint8Array(await new Response(res.stream).arrayBuffer());
-    return { audio, format: "m4a", durationMs: Number(match[1]) };
+    return {
+      audio,
+      format: match[2] as "m4a" | "mp3",
+      durationMs: Number(match[1]),
+    };
   } catch (err) {
     console.error("[medbuddy] prerendered speech lookup failed — text-only", {
       error: err instanceof Error ? err.message : "unknown",

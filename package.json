@@ -13,7 +13,8 @@
     "ingest": "node scripts/ingest-tfda.mts",
     "verify": "npm run typecheck && npm test && npm run build",
     "probe:line": "node scripts/line-webhook-probe.mts",
-    "probe:line-send": "vitest run src/lib/delivery/line/send.live.test.ts"
+    "probe:line-send": "vitest run src/lib/delivery/line/send.live.test.ts",
+    "prerender:speech": "node scripts/prerender-elder-speech.mts"
   },
   "dependencies": {
     "@vercel/blob": "^2.6.1",

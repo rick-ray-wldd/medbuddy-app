@@ -24,6 +24,7 @@ import { buildVerdict } from "@/lib/verdict/build";
 import { narrate } from "@/lib/narration/narrate";
 import { findSubject } from "@/lib/subjects";
 import { FishVoiceProvider } from "@/lib/voice/fish";
+import { defaultVoice, findDemoVoice } from "@/lib/voice/profiles";
 import { LineDelivery } from "@/lib/delivery/line/LineDelivery";
 import { getLineConfig } from "@/lib/delivery/line/config";
 import type { ItemSource } from "@/lib/grounding/types";
@@ -97,19 +98,30 @@ export async function POST(request: Request): Promise<NextResponse> {
   // accepts mp3 directly, verified drift in its README).
   let speech: DeliveryMessage["speech"];
   let speechError: string | null = null;
-  if (body.voiceId) {
-    const synthesis = await new FishVoiceProvider().synthesise({
-      text,
-      language: "zh",
-      profile: {
+  // A named voice wins; otherwise the deployment's configured one, which is
+  // absent unless MEDBUDDY_DEMO_VOICE_ID is set. No voice → no synthesis → no
+  // request leaves the process.
+  const profile = body.voiceId
+    ? (findDemoVoice(body.voiceId) ?? {
         id: `fish:${body.voiceId}`,
         subjectId: subject.id,
         displayName: subject.displayName,
-        provider: "fish",
+        provider: "fish" as const,
         externalVoiceId: body.voiceId,
-        createdAt: new Date().toISOString(),
-        consent: { statement: "delivery-time reference", givenAt: new Date().toISOString() },
-      },
+        createdAt: "",
+        consent: {
+          statement:
+            "Supplied per-request; this repository holds no consent record for it.",
+          givenAt: "",
+        },
+      })
+    : defaultVoice();
+
+  if (profile) {
+    const synthesis = await new FishVoiceProvider().synthesise({
+      text,
+      language: "zh",
+      profile,
     });
     if (synthesis.ok) {
       speech = {

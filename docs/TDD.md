@@ -6,7 +6,7 @@ Run: `npm install && npm run dev` · Tests: `npm test` · All three: `npm run ve
 Live: https://medbuddy-app.vercel.app
 
 Next.js 16 (App Router) · TypeScript · Tailwind 4 · Vitest · deployed on Vercel.
-120 tests. No database, no authentication. No external call at all unless a caregiver opts into a cloned voice (§2, §8).
+145 tests. No database, no authentication. No external call at all unless a caregiver opts into a cloned voice (§2, §8).
 
 ---
 
@@ -179,11 +179,17 @@ Delivery sits behind an interface (`src/lib/delivery/types.ts`) carrying two
 rules: the adapter holds **no medical logic**, and text is sent **verbatim** —
 an adapter that cannot send a message as-is must fail rather than alter it.
 
-Both are **stated, not enforced.** An interface and a comment cannot stop an
-implementation from rewriting a string, and no adapter exists yet to be held to
-them. What is enforced is the one check that could be: `containsLink`, exported
-so an adapter cannot send a link to an older adult without deliberately
-ignoring it.
+**The LINE adapter exists** (`src/lib/delivery/line/**`), written by a
+collaborator to `docs/LINE-ADAPTER-SPEC.md`. The spec fixed a path boundary so
+authorship stays unambiguous, and it held: the merge touches nothing in
+`grounding`, `rules`, `verdict` or `narration`. It implements signature
+verification, idempotency, verbatim delivery, and the refusal to send a link to
+an older adult.
+
+The interface itself still cannot *prevent* an adapter from rewriting a string
+— that is what review is for. What it does is make the obligation explicit and
+testable, and `containsLink` is exported so the one mechanical check does not
+have to be reinvented per adapter.
 
 **Outbound cloned-voice calls were designed and rejected.** I have shipped
 emotional voice cloning before, and it was the first thing I reached for.
@@ -349,7 +355,7 @@ support.
 
 **No LLM-as-judge anywhere.** Every check is a deterministic comparison against
 the verdict, which is why the whole clinical layer can be asserted rather than
-reviewed. `npm test` runs 120 tests offline on a clean clone (after `npm install`).
+reviewed. `npm test` runs 145 tests offline on a clean clone (after `npm install`).
 
 Layered:
 
@@ -361,8 +367,13 @@ Layered:
   the boundaries: only two severities, every finding bound to a subject, an
   unknown predicate throws rather than passing silently, output is
   byte-identical across runs.
-- **Narration** — the eight checks, each with an example that must be rejected,
-  and the fallback across four verdict shapes × two audiences.
+- **Narration** — the checks, each with an example that must be rejected, and
+  the fallback across four verdict shapes × two audiences.
+- **Voice** — that no request is made without a key, that a profile cannot exist
+  without consent, and that a model is always private.
+- **LINE adapter** — signature verification, idempotency, verbatim delivery, and
+  the refusal to send a link to an older adult. Written by the collaborator who
+  built the adapter, mocked so the suite runs offline.
 
 ### What the tests did not catch, and what that changed
 

@@ -1,0 +1,311 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { beforeAll, describe, expect, it } from "vitest";
+import { Resolver, type Registers } from "../grounding/resolve";
+import type { DrugClasses, RuleSet } from "../rules/types";
+import { buildVerdict } from "../verdict/build";
+import type { Verdict, VerdictSubject } from "../verdict/types";
+import { DeterministicNarrator } from "./deterministic";
+import { narrate } from "./narrate";
+import type { Narration, NarrationAudience, Narrator } from "./types";
+import { validateNarration } from "./validate";
+
+let resolver: Resolver;
+let registers: Registers;
+let ruleSets: RuleSet[];
+let classes: DrugClasses;
+
+const father: VerdictSubject = {
+  id: "subj-father",
+  displayName: "父親",
+  ageYears: 72,
+  conditions: ["chronic_liver_disease"],
+};
+
+beforeAll(() => {
+  const read = (...p: string[]) =>
+    JSON.parse(readFileSync(path.join(process.cwd(), ...p), "utf8"));
+  registers = {
+    drugs: read("data", "tfda-drugs.json"),
+    healthFoods: read("data", "tfda-health-foods.json"),
+  };
+  resolver = new Resolver(registers);
+  ruleSets = [
+    read("config", "rules", "stopp-v3.json"),
+    read("config", "rules", "tfda-health-food-warnings.json"),
+  ];
+  classes = read("config", "rules", "drug-classes.json");
+});
+
+function paracetamolName(): string {
+  const hit = registers.drugs.drugs.find(
+    (d) => d.ingredients.length === 1 && d.ingredients[0].includes("ACETAMINOPHEN"),
+  )!;
+  return hit.nameZh;
+}
+
+/** The scenario the product came from, plus something no register knows. */
+function fatherVerdict(): Verdict {
+  return buildVerdict(
+    father,
+    resolver.resolveAll([
+      { text: paracetamolName(), source: "otc" },
+      { text: "鄰居給的紅麴膠囊", source: "supplement" },
+      { text: "阿姨推薦的魚油", source: "supplement" },
+    ]),
+    ruleSets,
+    classes,
+  );
+}
+
+/** A narrator that returns whatever it is handed, to exercise the checks. */
+function stubNarrator(segments: Narration["segments"]): Narrator {
+  return {
+    name: "claude",
+    async narrate(verdict) {
+      return {
+        subjectId: verdict.subject.id,
+        subjectName: verdict.subject.displayName,
+        producedBy: "claude",
+        segments,
+      };
+    },
+  };
+}
+
+describe("the deterministic narrator", () => {
+  const audiences: NarrationAudience[] = ["caregiver", "elder"];
+
+  it.each(audiences)("passes its own checks for %s", async (audience) => {
+    const verdict = fatherVerdict();
+    const narration = await new DeterministicNarrator().narrate(verdict, audience);
+    expect(validateNarration(narration, verdict)).toEqual({ ok: true });
+  });
+
+  it("quotes the regulator rather than describing the warning", async () => {
+    const verdict = fatherVerdict();
+    const narration = await new DeterministicNarrator().narrate(verdict, "caregiver");
+    const quoted = narration.segments.filter((s) => s.kind === "verified");
+    expect(quoted.length).toBeGreaterThan(0);
+
+    // Every quoted segment must be findable in the verdict character for
+    // character, and must carry an attribution saying where it came from.
+    const sources = [
+      ...verdict.findings.flatMap((f) => [
+        f.verbatim,
+        ...(f.officialText ?? []).map((q) => q.text),
+      ]),
+      ...verdict.items.flatMap((i) =>
+        i.resolved ? [i.indications ?? "", i.officialWarning ?? ""] : [],
+      ),
+    ].map((t) => t.replace(/\s/g, ""));
+
+    for (const segment of quoted) {
+      expect(segment.attribution).toBeTruthy();
+      expect(sources.some((src) => src.includes(segment.text.replace(/\s/g, "")))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("tells the elder what a medicine is for, and never that he fell short", async () => {
+    const verdict = fatherVerdict();
+    const narration = await new DeterministicNarrator().narrate(verdict, "elder");
+    const text = narration.segments.map((s) => s.text).join();
+    expect(text).not.toMatch(/忘記|漏(吃|服)|沒(有)?吃/);
+    expect(text).not.toMatch(/嗎\?|嗎？/); // never asks him to confirm anything
+  });
+
+  it("says nothing was checked rather than implying everything is fine", async () => {
+    const verdict = buildVerdict(
+      father,
+      resolver.resolveAll([{ text: "阿姨推薦的魚油", source: "supplement" }]),
+      ruleSets,
+      classes,
+    );
+    const narration = await new DeterministicNarrator().narrate(verdict, "caregiver");
+    expect(narration.segments.some((s) => s.kind === "coverage")).toBe(true);
+  });
+});
+
+describe("what the checks reject", () => {
+  it("a medicine that is not in the verdict", async () => {
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "父親的【阿斯匹靈】需要注意。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("unknown_medicine_named");
+  });
+
+  it("a dose instruction", () => {
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "父親每天吃 2 顆就好。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("dose_instruction");
+  });
+
+  it("telling someone to stop a medicine", () => {
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "父親應該先停藥,等回診再說。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("stop_or_change_instruction");
+  });
+
+  it("asserting what the person did", () => {
+    // Memory for one's own routine is reconstructive. A system that states
+    // "you missed it yesterday" writes itself into that memory.
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "父親您昨天沒有吃降血壓的藥。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("asserts_past_behaviour");
+  });
+
+  it("a quoted segment that has been reworded", () => {
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [
+          { kind: "verified", text: "這個藥對肝不好,最好不要吃。", attribution: "警語" },
+        ],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("verified_text_altered");
+  });
+
+  it("hiding that some items could not be identified", () => {
+    const verdict = fatherVerdict();
+    expect(verdict.coverage.itemsUnresolved).toBeGreaterThan(0);
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "父親的用藥都核對過了,請找藥師確認。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("coverage_not_disclosed");
+  });
+
+  it("findings raised with nowhere to take them", () => {
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [
+          { kind: "explained", text: "父親的用藥有一些需要注意的地方。" },
+          { kind: "coverage", text: "有 1 項無法辨識。" },
+        ],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("missing_escalation");
+  });
+
+  it("not saying whose medicines these are", () => {
+    const verdict = fatherVerdict();
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "有一項需要請藥師確認。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("subject_not_named");
+  });
+});
+
+describe("falling back", () => {
+  it("discards a failing narration and shows the one we can vouch for", async () => {
+    const verdict = fatherVerdict();
+    const bad = stubNarrator([{ kind: "explained", text: "父親每天吃 3 顆普拿疼就好。" }]);
+
+    const outcome = await narrate(verdict, "caregiver", bad);
+
+    expect(outcome.usedFallback).toBe(true);
+    expect(outcome.narration.producedBy).toBe("deterministic");
+    expect(outcome.rejected?.producedBy).toBe("claude");
+    expect(outcome.rejected?.violations.length).toBeGreaterThan(0);
+    // And what is shown passes the checks.
+    expect(validateNarration(outcome.narration, verdict)).toEqual({ ok: true });
+  });
+
+  it("falls back when the narrator throws", async () => {
+    const verdict = fatherVerdict();
+    const broken: Narrator = {
+      name: "claude",
+      async narrate() {
+        throw new Error("network");
+      },
+    };
+    const outcome = await narrate(verdict, "caregiver", broken);
+    expect(outcome.usedFallback).toBe(true);
+    expect(validateNarration(outcome.narration, verdict)).toEqual({ ok: true });
+  });
+
+  it("keeps a narration that passes", async () => {
+    const verdict = fatherVerdict();
+    const good = await new DeterministicNarrator().narrate(verdict, "caregiver");
+    const outcome = await narrate(verdict, "caregiver", stubNarrator(good.segments));
+    expect(outcome.usedFallback).toBe(false);
+    expect(outcome.narration.producedBy).toBe("claude");
+  });
+
+  it("works with no model configured at all", async () => {
+    const verdict = fatherVerdict();
+    const outcome = await narrate(verdict, "caregiver", null);
+    expect(outcome.usedFallback).toBe(false);
+    expect(outcome.narration.producedBy).toBe("deterministic");
+  });
+});

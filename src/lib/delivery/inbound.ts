@@ -111,6 +111,10 @@ export async function handleInbound(
     const outcome = await narrate(verdict, "elder", null, knownMedicines);
     const text = outcome.narration.segments.map((s) => s.text).join("\n");
 
+    // Voice when an exact pre-rendered match exists; text-only otherwise.
+    const { findPrerenderedSpeech } = await import("./prerendered-speech");
+    const speech = await findPrerenderedSpeech(text);
+
     const delivery =
       deps.delivery ??
       new (await import("./line/LineDelivery")).LineDelivery({
@@ -124,7 +128,7 @@ export async function handleInbound(
         role: "elder",
         subject: { id: subject.id, displayName: subject.displayName },
       },
-      { text },
+      speech ? { text, speech } : { text },
     );
     console.log("[medbuddy] inbound answered", {
       providerMessageId: msg.providerMessageId,

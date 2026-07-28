@@ -133,7 +133,11 @@ export default function CheckClient({ subjects }: { subjects: SeededSubject[] })
 
       {result && (
         <>
-          <Observe subjectId={subject.id} />
+          {/* Reporting is the caregiver's, never the older adult's. A review
+              found this rendered beside both views, offering him 漏服 to tick —
+              which is precisely the admission the product promises never to
+              ask him for. */}
+          {audience === "caregiver" && <Observe subjectId={subject.id} />}
           <Result
           data={result}
           audience={audience}
@@ -286,10 +290,23 @@ function Coverage({ verdict }: { verdict: Verdict }) {
               {item.resolved
                 ? null
                 : item.reason === "ambiguous"
-                  ? "名稱不夠明確,無法確定是哪一個品項"
+                  ? "名稱不夠明確,可能是下列其中一項"
                   : item.reason === "matched_without_ingredients"
                     ? "查得到這個品名,但登記沒有記載成分"
                     : "任何登記都查不到"}
+              {/* Declining to choose is only half of it. The candidates are in
+                  the verdict, and a person holding the box can tell them apart
+                  where we cannot. */}
+              {!item.resolved && item.candidates && item.candidates.length > 0 && (
+                <ul className="ml-4 mt-1 list-disc text-neutral-500">
+                  {item.candidates.map((c) => (
+                    <li key={c.permit}>
+                      {c.nameZh}
+                      <span className="ml-1 text-xs">({c.permit})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>

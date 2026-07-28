@@ -98,9 +98,13 @@ say *"I could not identify this"* rather than presenting a tidy list.
 ## 3. The three workflows
 
 One record, three role-scoped projections. The relationship between people is
-many-to-many from the start, because the shapes that matter are a father with
-two adult children who split the appointments, a facility carer responsible for
-twelve residents across a shift, and someone caring for both parents at once.
+designed many-to-many — a father with two adult children who split the
+appointments, a facility carer responsible for twelve residents across a shift,
+someone caring for both parents at once. **That model is documented
+(`docs/DATA-MODEL.md`) but not yet implemented**: this build seeds three people
+and stamps a single carer id. What is enforced today is the part that matters
+most for safety — every finding carries its subject, and nothing renders
+without the name.
 
 ### 3.1 The caregiver — the first user, and the one who pays
 
@@ -156,7 +160,11 @@ market. When the son says out loud, in front of his father, that doses get
 missed and the drinking has increased, the father goes quiet. **A sheet delivers
 the same information without staging that moment.**
 
-**Not built.** The generator is the next thing after persistence. §5.
+**Built.** `/summary/[subjectId]` — it leads with the count of items absent
+from the prescription record, then the family's questions with the source
+quoted whole, then everything being taken grouped by where it came from, what
+could not be identified, the change since last time, and what the family
+observed. No recommendation anywhere on it.
 
 ---
 
@@ -168,8 +176,9 @@ product never says anything a regulator or a published criterion did not.
 - **23,211 dispensable medicines** from the Taiwan FDA permit register, with
   ingredients parsed and indications quoted. 71,965 records filtered down:
   revoked permits and raw materials removed.
-- **464 licensed health foods**, each carrying the 警語 and 注意事項 text the
-  regulator approved for that specific product.
+- **464 licensed health foods**. 417 carry approved 警語 text and 460 carry
+  注意事項; the fields are optional in the register and are treated as optional
+  in code.
 - **STOPP version 3** (O'Mahony et al. 2023, CC BY 4.0), 8 criteria encoded of
   133, each quoted word for word.
 - Both registers and both rule sets are **committed to this repository**, so a
@@ -179,9 +188,12 @@ product never says anything a regulator or a published criterion did not.
 Three properties do most of the work:
 
 1. **Clinical judgement ends at the verdict object.** Narration cannot look
-   anything up, so it cannot introduce a medicine, criterion or warning the
-   verdict did not already contain — and because its input is a fixed object,
-   its output is checked against that object before anyone sees it.
+   anything up, and what it writes is checked before anyone sees it: it may not
+   name a medicine outside the verdict, alter quoted text, hide incomplete
+   coverage, state a dose, instruct a change, assert what the person did, or
+   name a clinical outcome in its own words. Those checks are structural and
+   lexical, **not semantic** — see TDD §5 for what that does and does not
+   buy.
 2. **Not knowing is a result.** Three distinct kinds: nothing matched, the name
    is ambiguous, or the product is named but its composition is not recorded.
    Coverage travels with the findings everywhere they appear.
@@ -209,9 +221,9 @@ It raises questions. It does not answer them.
 | Required by the brief | State |
 | --- | --- |
 | Voice-friendly **or highly accessible chat** interaction | **Partial.** Large type, Traditional Chinese, a single form, no jargon — but no conversational turn and no speech. This is the weakest of the four. |
-| Explains purpose, timing and interactions with grounded data and clear limits | **Built**, and it is the strongest. |
-| Structured medication / symptom / adherence log over time | **Not built.** The check is stateless: nothing is persisted. |
-| Clinician- or caregiver-reviewable summary, escalating rather than deciding | **Half.** Escalation and the caregiver view are built; the clinician page is not. |
+| Explains purpose, timing and interactions with grounded data and clear limits | **Purpose and interactions built; timing is not.** The register's dosing text is not carried into the item model. This is still the strongest of the four. |
+| Structured medication / symptom / adherence log over time | **Built.** Snapshots on every check, observations in the carer's words, and the change between captures. In memory only — a restart loses it. |
+| Clinician- or caregiver-reviewable summary, escalating rather than deciding | **Built.** `/summary/[subjectId]` renders the page a family hands over; escalation is a two-value enumeration checked when rule sets load. |
 
 Also declared: a LINE delivery adapter is **specified and interfaced but not
 implemented** (`docs/LINE-ADAPTER-SPEC.md`). A collaborator who knows the LINE
@@ -220,9 +232,10 @@ authorship stays unambiguous. If it does not land it ships as a documented,
 tested, unwired module — which is why delivery was put behind an interface in
 the first hour.
 
-**Persistence is the keystone.** It is the missing requirement, and it is also
-what would let LINE and the web view be the same record rather than two products
-— because they would read the same log.
+**Durable persistence is what remains.** The log exists and the surfaces read
+it, but the store is in memory: a restart loses everything, and a serverless
+deployment may not share a process between requests. Replacing it is one file,
+because everything above is written against a `LogStore` interface.
 
 ---
 
@@ -245,10 +258,11 @@ what would let LINE and the web view be the same record rather than two products
    all, and a facility has no grandson. Facility value is continuity across
    shifts and a defensible record — a different pitch, a different buyer, the
    same rules and registers underneath.
-4. **Taiwan → elsewhere.** Rule sets are files. STOPP is European and already
-   carries a commercial licence; PIM-Taiwan exists for local practice; Beers is
-   the American equivalent. Adding a market is adding a register and a rule
-   file, not a rewrite. The intake layer is what is local, and it is small.
+4. **Taiwan → elsewhere.** Rule sets are files, and the engine interprets
+   shapes rather than holding medication knowledge, so a new criteria set is a
+   new file. A new *register* is more than that: the two TFDA shapes are typed
+   and the two rule files are named in `registry.ts`, so a second country needs
+   a register adapter as well. Smaller than a rewrite, larger than a file.
 
 ---
 

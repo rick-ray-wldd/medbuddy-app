@@ -53,6 +53,25 @@ async function verifiedFallback(
   return result.ok ? { narration } : { narration, violations: result.violations };
 }
 
+/**
+ * How long we wait for a model.
+ *
+ * The documented behaviour was "unreachable, slow, or unparseable — fall
+ * back", and a review pointed out that `await` on a model that never resolves
+ * is not slow, it is forever. A caregiver waiting on a page is a worse failure
+ * than a plainer sentence.
+ */
+const MODEL_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    work,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`narrator exceeded ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 export async function narrate(
   verdict: Verdict,
   audience: NarrationAudience,
@@ -61,7 +80,10 @@ export async function narrate(
 ): Promise<NarrationOutcome> {
   if (preferred) {
     try {
-      const candidate = await preferred.narrate(verdict, audience);
+      const candidate = await withTimeout(
+        preferred.narrate(verdict, audience),
+        MODEL_TIMEOUT_MS,
+      );
       const result = validateNarration(candidate, verdict, known);
       if (result.ok) return { narration: candidate, usedFallback: false };
 

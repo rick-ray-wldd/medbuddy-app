@@ -1,14 +1,29 @@
 /**
  * Check a narration against the verdict it claims to describe.
  *
- * This is what makes it safe to let a language model write the words. The model
- * is not trusted; its output is verified. Every rule here is a deterministic
- * comparison against the verdict — no model judges another model, and the same
- * checks run whether the text came from a template or from Claude.
+ * The model is not trusted; its output is verified. Every rule here is a
+ * deterministic comparison — no model judges another model — and the same
+ * checks run whether the text came from a template or from Claude. A narration
+ * that fails is not shown; the deterministic one is used instead.
  *
- * A narration that fails any of these is not shown. The deterministic narrator
- * is used instead. Silence is recoverable; a wrong medication explanation is
- * not.
+ * ## What this does and does not guarantee
+ *
+ * These checks are **structural and lexical, not semantic.** They guarantee
+ * that narration cannot name a medicine outside the verdict, alter quoted
+ * text, hide incomplete coverage, state a dose, instruct a change, assert what
+ * the person did, name a clinical outcome in its own words, or leave a finding
+ * without somewhere to take it.
+ *
+ * They do **not** prove that an arbitrary sentence is entailed by the verdict.
+ * A review demonstrated exactly that: 「父親吃這些藥一定會腎衰竭。」 once passed
+ * against an empty verdict. That specific shape is now rejected, and the
+ * general property still does not hold for free prose.
+ *
+ * Two things make the gap tolerable rather than fatal. The deterministic
+ * narrator is assembled from verdict fields, so for the narrator actually
+ * shipping today the property holds by construction. And a model narrator, when
+ * one is wired, should be constrained to fill slots rather than write prose —
+ * which is where this ends up, not a longer regex.
  */
 
 import type { Verdict } from "../verdict/types";
@@ -54,7 +69,8 @@ export type Violation = {
     | "stop_or_change_instruction"
     | "asserts_past_behaviour"
     | "missing_escalation"
-    | "subject_not_named";
+    | "subject_not_named"
+    | "unsupported_clinical_claim";
   detail: string;
 };
 
@@ -81,6 +97,23 @@ const PAST_BEHAVIOUR_PATTERN =
   /(?:您|你|他|她)(?:昨天|前天|上週|上周|這週|這周|最近)[^。！？]{0,12}(?:沒(?:有)?(?:吃|服用)|忘記|漏(?:吃|服))/;
 
 const ESCALATION_PATTERN = /藥師|醫師|醫生/;
+
+/**
+ * Clinical outcomes and certainty, in our own words.
+ *
+ * A review demonstrated the gap these close: against an empty verdict, the
+ * sentence 「父親吃這些藥一定會腎衰竭。」 passed every check, because none of
+ * them looked at whether an assertion was traceable to a finding. Naming an
+ * outcome, or asserting one will certainly happen, is a clinical claim, and a
+ * clinical claim belongs in quoted text that must appear in the verdict
+ * character for character — not in prose we wrote.
+ *
+ * This narrows the surface; it does not make it semantic. §Limits below.
+ */
+const CLINICAL_OUTCOME_PATTERN =
+  /腎衰竭|肝衰竭|心衰竭|中風|心肌梗塞|洗腎|猝死|死亡|致命|失明|癌|昏迷|休克|橫紋肌溶解|出血/;
+
+const CERTAINTY_PATTERN = /一定會|必然|絕對會|肯定會|保證|100%|百分之百/;
 
 export function validateNarration(
   narration: Narration,
@@ -184,6 +217,21 @@ export function validateNarration(
     violations.push({
       code: "asserts_past_behaviour",
       detail: firstMatch(ourOwnWords, PAST_BEHAVIOUR_PATTERN),
+    });
+  }
+
+  // 7b. No clinical outcome or certainty in our own words. Anything of that
+  //     kind must be quoted from a source, where it faces the stronger check.
+  if (CLINICAL_OUTCOME_PATTERN.test(ourOwnWords)) {
+    violations.push({
+      code: "unsupported_clinical_claim",
+      detail: `names a clinical outcome outside quoted text: ${firstMatch(ourOwnWords, CLINICAL_OUTCOME_PATTERN)}`,
+    });
+  }
+  if (CERTAINTY_PATTERN.test(ourOwnWords)) {
+    violations.push({
+      code: "unsupported_clinical_claim",
+      detail: `asserts certainty: ${firstMatch(ourOwnWords, CERTAINTY_PATTERN)}`,
     });
   }
 

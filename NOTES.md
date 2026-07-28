@@ -194,4 +194,38 @@ being loaded twice would have cost only memory; the log being two logs makes a
 feature look built when it is not — and only walking the flow the way a user
 does would have caught it.
 
+### A third review, this time of the documents against the code
+
+Pointed a second agent at the PRD and TDD with one question: where do these
+claim something the code does not do? That failure mode had already caught me
+once — a README saying narration could not reach the drug data, which was false.
+
+It found twelve. The ones that mattered:
+
+- **The two-value severity guarantee was not true at runtime.** It was a type
+  and a test over one fixture. A rule *file* declaring `severity: "stop_now"`
+  was copied onto a finding and out to the surface. Rule sets are data, and data
+  from a file is where a type stops helping. There is now a check that throws.
+- **"Clinical judgement ends at the verdict" was not an enforced semantic
+  boundary.** Against an empty verdict, 「父親吃這些藥一定會腎衰竭。」 returned
+  ok — every check was lexical and none asked whether an assertion was
+  traceable. That shape is rejected now, and more importantly the documents no
+  longer claim the strong property. They say structural and lexical, and they
+  say where that stops.
+- **The elder projection was not role-scoped in the UI.** The observation form
+  rendered beside both views and offered him 漏服 to tick — the exact admission
+  the product promises never to ask him for. The narration was tested; the page
+  around it was not.
+- **A model that never resolves is not slow, it is forever.** No timeout.
+- **The API dropped the violations** the design document said were reported, so
+  two failure modes were false at the only place anyone could observe them.
+- Test count stale, the health-food warning claim wrong (417 of 464 carry 警語,
+  not all), timing not built, delivery rules stated rather than enforced,
+  many-to-many designed rather than implemented.
+
+The pattern across all three reviews is the same one, and it is worth naming
+because it is the thing to watch for rather than any individual bug: **the
+documentation drifts optimistic.** Every false claim was a true statement about
+what I intended, written before or instead of checking what the code did.
+
 <!-- append below, newest at the bottom -->

@@ -236,7 +236,9 @@ describe("invention in fluent prose", () => {
       segments: [
         {
           kind: "explained" as const,
-          text: `父親好。您的${absent.nameZh}跟其他藥一起吃可能會造成出血,請先問藥師。`,
+          // Deliberately free of outcome words, so this isolates the
+          // medicine-name check rather than tripping the clinical-claim one.
+          text: `父親好。您的${absent.nameZh}記得配水吃,有問題請先問藥師。`,
         },
       ],
     };
@@ -398,6 +400,55 @@ describe("what the checks reject", () => {
     if (result.ok) return;
     expect(result.violations.map((v) => v.code)).toContain("subject_not_named");
   });
+});
+
+describe("clinical claims in our own words", () => {
+  // A review ran this against an empty verdict and validation returned ok:
+  // none of the checks looked at whether an assertion was traceable to a
+  // finding. Naming an outcome, or asserting one will certainly happen, is a
+  // clinical claim and belongs in quoted text.
+  it("rejects a named outcome that no finding supports", () => {
+    const verdict = buildVerdict(father, resolver.resolveAll([]), ruleSets, classes);
+    const result = validateNarration(
+      {
+        subjectId: verdict.subject.id,
+        subjectName: "父親",
+        producedBy: "claude",
+        segments: [{ kind: "explained", text: "父親吃這些藥一定會腎衰竭。" }],
+      },
+      verdict,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("unsupported_clinical_claim");
+  });
+
+  it("allows the same words when they are quoted from a source", async () => {
+    // The regulator's own warning for red yeast rice names 肝、腎損傷 and
+    // 橫紋肌溶解症. Rejecting the quote would punish accuracy.
+    const verdict = buildVerdict(
+      father,
+      resolver.resolveAll([{ text: "鄰居給的紅麴膠囊", source: "supplement" }]),
+      ruleSets,
+      classes,
+    );
+    expect(verdict.findings.some((f) => f.ruleId === "TFDA-HF-LIVER")).toBe(true);
+    const outcome = await narrate(verdict, "caregiver", null);
+    expect(outcome.fallbackViolations).toBeUndefined();
+  });
+});
+
+describe("a narrator that never answers", () => {
+  it("falls back rather than waiting forever", async () => {
+    const verdict = fatherVerdict();
+    const hangs: Narrator = {
+      name: "claude",
+      narrate: () => new Promise(() => {}),
+    };
+    const outcome = await narrate(verdict, "caregiver", hangs);
+    expect(outcome.usedFallback).toBe(true);
+    expect(outcome.narration.producedBy).toBe("deterministic");
+  }, 20_000);
 });
 
 describe("falling back", () => {

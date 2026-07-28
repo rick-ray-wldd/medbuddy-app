@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { evaluateRules, type EvaluationInput } from "./engine";
+import { assertRuleSetIsSafe, evaluateRules, type EvaluationInput } from "./engine";
 import type { DrugClasses, EvaluationItem, RuleSet } from "./types";
 
 let stopp: RuleSet;
@@ -213,6 +213,30 @@ describe("boundaries the engine must not cross", () => {
     const a = evaluateRules(input, [stopp], classes);
     const b = evaluateRules(input, [stopp], classes);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it("refuses a rule set declaring a severity that is not an escalation", () => {
+    // A review showed this: the two-value guarantee was a type and a test over
+    // one fixture. A rule file saying "stop_now" was copied onto a finding and
+    // out to the surface. Rule sets are data, and data from a file is where a
+    // type stops helping.
+    const rogue = {
+      ...stopp,
+      rules: [{ ...stopp.rules[0], severity: "stop_now" as never }],
+    };
+    expect(() => assertRuleSetIsSafe(rogue)).toThrow(/stop_now/);
+    expect(() =>
+      evaluateRules(father([item("i1", "普拿疼", ["ACETAMINOPHEN"])]), [rogue], classes),
+    ).toThrow(/only consult_pharmacist and consult_physician/);
+  });
+
+  it("refuses a rule with no source text to quote", () => {
+    const empty = { ...stopp, rules: [{ ...stopp.rules[0], verbatim: "  " }] };
+    expect(() => assertRuleSetIsSafe(empty)).toThrow(/no source text/);
+  });
+
+  it("accepts the rule sets this repository ships", () => {
+    expect(() => assertRuleSetIsSafe(stopp)).not.toThrow();
   });
 
   it("throws rather than silently passing an unknown predicate", () => {

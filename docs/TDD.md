@@ -6,7 +6,7 @@ Run: `npm install && npm run dev` · Tests: `npm test` · All three: `npm run ve
 Live: https://medbuddy-app.vercel.app
 
 Next.js 16 (App Router) · TypeScript · Tailwind 4 · Vitest · deployed on Vercel.
-96 tests. No database, no authentication, no external API calls at request time.
+112 tests. No database, no authentication, no external API calls at request time.
 
 ---
 
@@ -36,12 +36,12 @@ delivery/    web today, LINE behind the same interface
 Everything downstream is presentation. The verdict does carry register-derived
 fields — ingredients, indications, a product's approved warning — because
 narration has to be able to say what a medicine is for. What narration cannot do
-is *look anything up*. It has no access to the registers or the rule sets, so it
-cannot introduce a medicine, a criterion, or a warning the verdict did not
-already contain.
+is *look anything up*: it is handed a verdict and nothing else, so it cannot
+fetch a criterion or a warning that was not already decided upstream.
 
-That is what makes the model layer testable rather than reviewable: its input is
-a fixed object, so its output can be asserted against that object.
+Its input being a fixed object is what makes checking possible. **Checking is
+not proof** — the checks in §5 are structural and lexical, and the section says
+plainly where that stops.
 
 **One inversion is deliberate and worth naming.** The narrator may not reach the
 registers; the *validator* may, and must. Detecting an invented medicine
@@ -132,6 +132,10 @@ no jargon. There is no conversational turn and no speech in or out. Of the four
 required behaviours this is the weakest, and calling it otherwise would be the
 kind of overclaim §5 exists to catch.
 
+The register records dosing text, and **timing is not carried into the item
+model** — so "explains purpose, timing and interactions" is true of purpose and
+interactions, and not yet of timing.
+
 ### Why LINE, and why not a phone call
 
 The elder this was designed around uses LINE daily and is comfortable holding to
@@ -139,11 +143,15 @@ record a voice message. He also **taps links without checking**, which is one of
 the few concrete facts available about him and which rules out sending him any
 link at all: a voice message has to be self-contained.
 
-Delivery sits behind an interface (`src/lib/delivery/types.ts`) with two rules
-that are enforced rather than documented: the adapter carries **no medical
-logic**, and text is sent **verbatim** — an adapter that cannot send a message
-as-is fails rather than alters it, because a medication explanation that arrives
-altered is worse than one that does not arrive.
+Delivery sits behind an interface (`src/lib/delivery/types.ts`) carrying two
+rules: the adapter holds **no medical logic**, and text is sent **verbatim** —
+an adapter that cannot send a message as-is must fail rather than alter it.
+
+Both are **stated, not enforced.** An interface and a comment cannot stop an
+implementation from rewriting a string, and no adapter exists yet to be held to
+them. What is enforced is the one check that could be: `containsLink`, exported
+so an adapter cannot send a link to an older adult without deliberately
+ignoring it.
 
 **Outbound cloned-voice calls were designed and rejected.** I have shipped
 emotional voice cloning before, and it was the first thing I reached for.
@@ -163,12 +171,19 @@ dependency, no fraud surface — deferred behind persistence and this document.
 
 ## 3. Structured logs
 
-**Not built. This is the honest gap**, and it is the keystone: it is a required
-behaviour, and it is also what would make LINE and the web view the same record
-rather than two products.
+**Built, in memory.** Every check appends a snapshot; observations are recorded
+in the carer's words; the change between consecutive snapshots is computed
+rather than stored, because storing it would let it drift from them.
 
-The model is designed (`docs/DATA-MODEL.md`) and the types it needs already
-exist:
+The store is an interface with an in-memory implementation, and the limits are
+real: a restart loses everything, and a serverless deployment may not share a
+process between requests. Replacing it with Postgres changes one file.
+
+`Carer` and `CareRelationship` are in the model below but **not yet code** —
+this build stamps a single carer id. What is enforced is the part that carries
+the risk: every finding names its subject.
+
+The shape:
 
 ```
 Subject           the person; conditions[] drive the drug-condition criteria
@@ -206,9 +221,11 @@ provenance. **Built.**
 **Elder:** what each medicine is for, in the register's own words. Tests assert
 his view contains no question mark and never mentions a missed dose. **Built.**
 
-**Clinician:** one page — the complete list including what is not a
-prescription, what changed since last time, what the family observed, and the
-questions they want to ask. **Not built.**
+**Clinician:** `/summary/[subjectId]` — one page, leading with the count of
+items absent from the prescription record, then the family's questions with the
+source quoted whole, then everything being taken grouped by where it came from,
+what could not be identified, the change since last time, and what the family
+observed. **Built.**
 
 It carries information, never a recommendation. The product does not tell a
 physician what to prescribe, for the same reason it does not tell a family to
@@ -224,6 +241,7 @@ model judges another model.
 | Rejected | Why |
 | --- | --- |
 | names a medicine the verdict does not contain | invention, the central risk |
+| names a clinical outcome, or asserts certainty, in our own words | such a claim belongs in quoted text, where it must match a source |
 | **names a medicine the registers know but this verdict lacks** | the same risk in unmarked prose |
 | alters text marked as quoted | a paraphrased criterion is no longer the criterion |
 | hides that items could not be identified | findings without coverage read as a complete picture |
@@ -236,8 +254,23 @@ model judges another model.
 **A narration that fails is not shown.** The deterministic narrator is used
 instead, and *it is validated too* — the fallback is not an error path, it is
 what makes using a model here defensible. If the fallback itself fails, the
-violations are carried out rather than swallowed, because a template narrator
-failing its own checks is a defect in this repository, not a runtime state.
+violations are returned by the API rather than swallowed, because a template
+narrator failing its own checks is a defect in this repository, not a runtime
+state.
+
+### What these checks do not do
+
+They are **structural and lexical, not semantic.** They cannot establish that an
+arbitrary sentence is entailed by the verdict, and a review proved it: against an
+empty verdict, 「父親吃這些藥一定會腎衰竭。」 once returned ok. That specific
+shape is rejected now — naming a clinical outcome or asserting certainty in our
+own words is a violation — but the general property does not hold for free prose,
+and claiming otherwise would be the overclaim this section exists to catch.
+
+Two things make the gap tolerable rather than fatal. The narrator shipping today
+is assembled from verdict fields, so for it the property holds by construction.
+And a model narrator, when one is wired, belongs behind a slot-filling contract
+rather than free generation — that is where this ends, not a longer regex.
 
 Two of these checks were opened by review with working exploits, and both are
 worth stating because they are the kind of thing that hides:
@@ -259,8 +292,14 @@ worth stating because they are the kind of thing that hides:
 ## 6. Escalation
 
 `Severity` is an enumeration of exactly two values: `consult_pharmacist` and
-`consult_physician`. There is no third, no "safe", no "no action needed", and a
-test asserts no other value can appear on a finding.
+`consult_physician`. There is no third, no "safe", no "no action needed".
+
+That was a type and a test over one fixture until a review showed the difference:
+a rule *file* declaring `severity: "stop_now"` was copied onto a finding and out
+to the surface. Rule sets are data, and data arriving from a file is where a type
+stops helping. `assertRuleSetIsSafe` now runs over every rule set on evaluation
+and **throws** rather than filtering — a rule set we do not understand must not
+be partially applied, because half a safety check looks like a whole one.
 
 Every finding carries the rule's `limits` — what this encoding cannot know —
 and the limit is rendered next to the finding rather than kept in
@@ -278,11 +317,11 @@ support.
 
 **No LLM-as-judge anywhere.** Every check is a deterministic comparison against
 the verdict, which is why the whole clinical layer can be asserted rather than
-reviewed. `npm test` runs 96 tests offline on a clean clone.
+reviewed. `npm test` runs 112 tests offline on a clean clone (after `npm install`).
 
 Layered:
 
-- **Normalisation** — 15 tests. Matching is where a grounding system goes wrong
+- **Normalisation** — 14 tests. Matching is where a grounding system goes wrong
   quietly, so it was tested first.
 - **Resolution** against a readable fixture, and again against all 23,211 real
   permits, where names collide and strengths repeat.
@@ -319,13 +358,14 @@ support.
 
 ## 8. Privacy
 
-**Nothing is stored.** The check is stateless: a request produces a verdict and
-returns it. No database, no accounts, no telemetry, no third-party calls at
-request time — the registers are files in the repository, so a medication list
-never leaves the process that received it.
+**Nothing leaves the process.** No database, no accounts, no telemetry, no
+third-party calls at request time — the registers are files in the repository,
+so a medication list is never sent anywhere. The log is held in memory for the
+life of the process and is not written to disk.
 
-All data in the repository is **synthetic**. The three seeded people are
-constructed; no real patient data is present.
+**No real patient data is in this repository.** The three seeded people are
+constructed. The registers and the criteria are real, and deliberately so —
+they are public regulatory data and a CC BY paper, not anybody's record.
 
 Health information does not reach a model today, because no model is wired up.
 When one is, the boundary is already the right shape: the narrator receives the
@@ -351,11 +391,13 @@ document.
 | Named but no ingredients | `matched_without_ingredients`; no rule runs against it |
 | **Nothing identifiable at all** | `nothing_checkable` — distinct from "checked, no findings". Zero findings because nothing was recognised is not reassurance, and the surface must not render it as such |
 | Rule set outside its age scope | skipped, with version and reason recorded |
-| Model unreachable, slow, or unparseable | deterministic narration, marked as a fallback |
-| Model output fails validation | discarded; violations reported alongside |
-| **Fallback itself fails validation** | carried out in `fallbackViolations` — a defect here, not a runtime state |
+| Model unreachable or unparseable | deterministic narration, marked as a fallback |
+| **Model that never answers** | 8-second timeout, then the same fallback. `await` on a hanging promise is not slow, it is forever |
+| Model output fails validation | discarded; `narrationRejected` returned by the API alongside the narration that replaced it |
+| **Fallback itself fails validation** | returned in `fallbackViolations` — a defect here, not a runtime state |
+| Rule set declaring a severity that is not an escalation | **throws** when the set is evaluated; rule files are data, and a type does not check data |
 | Unknown predicate in a rule file | **throws**; a shape the engine does not understand must not pass silently |
-| Register or rule file missing | process fails at startup rather than serving unchecked answers |
+| Register or rule file missing | throws on first use rather than serving unchecked answers — the read is lazy, so this is the first request, not process start |
 
 The design bias throughout: **fail loudly, never silently, and never substitute
 a comfortable answer for a missing one.** A medication explanation that does not

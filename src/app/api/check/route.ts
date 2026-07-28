@@ -69,8 +69,12 @@ export async function POST(request: Request) {
   return NextResponse.json({
     verdict,
     narration: outcome.narration,
-    // Surfaced rather than hidden: if a model's narration had been rejected,
-    // the reader should be able to find out that it was.
+    // Carried out to the surface rather than kept internal. A review found the
+    // route dropping these while the design document claimed they were
+    // reported — which made a documented failure mode false at the only place
+    // anyone could observe it.
     narrationFallback: outcome.usedFallback,
+    narrationRejected: outcome.rejected ?? null,
+    fallbackViolations: outcome.fallbackViolations ?? null,
   });
 }

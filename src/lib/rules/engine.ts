@@ -172,6 +172,36 @@ function quotedWarnings(items: EvaluationItem[]) {
   return quoted.length > 0 ? quoted : undefined;
 }
 
+const ALLOWED_SEVERITIES = ["consult_pharmacist", "consult_physician"] as const;
+
+/**
+ * Check a rule set before trusting it.
+ *
+ * The product's central boundary is that it only ever escalates to a
+ * pharmacist or a physician. That was a type-level claim and a test over one
+ * fixture, which a review showed is not the same thing: a rule file declaring
+ * `severity: "stop_now"` was copied straight onto a finding and out to the
+ * surface. Rule sets are data, and data arriving from a file is exactly where
+ * a type stops helping.
+ *
+ * Throws rather than filtering. A rule set we do not understand must not be
+ * partially applied — half a safety check is worse than none, because it
+ * looks like a whole one.
+ */
+export function assertRuleSetIsSafe(ruleSet: RuleSet): void {
+  for (const rule of ruleSet.rules) {
+    if (!ALLOWED_SEVERITIES.includes(rule.severity)) {
+      throw new Error(
+        `${ruleSet.id}:${rule.id} declares severity "${rule.severity}"; ` +
+          `only ${ALLOWED_SEVERITIES.join(" and ")} may reach a person`,
+      );
+    }
+    if (!rule.verbatim?.trim()) {
+      throw new Error(`${ruleSet.id}:${rule.id} has no source text to quote`);
+    }
+  }
+}
+
 export function evaluateRules(
   input: EvaluationInput,
   ruleSets: RuleSet[],
@@ -182,6 +212,11 @@ export function evaluateRules(
   const skippedRuleSets: Evaluation["skippedRuleSets"] = [];
 
   for (const ruleSet of ruleSets) {
+    // Checked on every evaluation rather than once at load: a rule set can be
+    // swapped in by a caller, and this is the only place all of them pass
+    // through.
+    assertRuleSetIsSafe(ruleSet);
+
     // Criteria written for people aged 65 and over say nothing about anyone
     // younger. Applying them anyway would produce findings the source does not
     // support, so the set is skipped and the skip is reported.

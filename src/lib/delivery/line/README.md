@@ -15,7 +15,7 @@ Transport only. **No medical logic lives here** — see `docs/LINE-ADAPTER-SPEC.
 | §6.5 subject guard, §6.1 elder-link guard, text limit | ✅ implemented + tested (link detector is a conservative starter — harden per TODO) |
 | **Push to Messaging API** | ✅ implemented + tested — verbatim delivery (character-exact test), failure mapping (401/403 · 4xx · 429 · 5xx · network), one request per send, never throws, never auto-retries |
 | **Inbound audio content download (api-data host)** | ✅ implemented + tested (`content.ts`) — Bearer GET on api-data, bytes untouched, format from Content-Type, event-duration precedence; failure (incl. 202 still-preparing) → log, 200, drop; `external` contentProvider → drop (not retrievable) |
-| **Audio out: hosting (`AudioStore`) + m4a transcode** | ❌ DEFERRED to merge time — hosting needs a repo-level decision (Vercel Blob vs serving route, both need approval); stubs fail loudly; todos 4–5 remain `it.todo` |
+| **Audio out (Step 4)** | ✅ implemented + tested 2026-07-28 — private Vercel Blob (`blob-audio-store.ts`) + HMAC-signed short-lived URLs (`audio-url.ts`, 30 min TTL) served by `src/app/api/line/audio/[key]/route.ts`; push carries `[text, audio]`; m4a/mp3 pass through (verified drift), wav → `unsupported-audio-format`; size (200 MB) + duration + HTTPS enforced. Env: `AUDIO_PUBLIC_BASE_URL`, `AUDIO_URL_SIGNING_SECRET`, `BLOB_READ_WRITE_TOKEN` (auto) |
 | `LIMITS` values in `config.ts` | ✅ verified 2026-07-28 (see drift log; `maxAudioDurationMs` is a deliberate adapter-level cap — LINE docs set none) |
 
 ## Decisions taken (revisit freely)
@@ -100,6 +100,8 @@ This module was built in a standalone scaffold folder, then merged. Outcomes:
 1. Reply vs push: should `Delivery` grow a reply-token field, or is push-only
    acceptable for the demo?
 2. Dedupe replay semantics when `handleInbound` throws (see above).
-3. Audio hosting: OK to add Vercel Blob (signed, short-lived URLs — the audio
-   is health information), or do you prefer something else?
+3. ~~Audio hosting~~ RESOLVED 2026-07-28: private Vercel Blob + HMAC-signed
+   30-min URLs via `src/app/api/line/audio/[key]/route.ts` (approved by 張守豐;
+   the serving route is a sanctioned §2-boundary exception). `@vercel/blob`
+   dependency added with approval.
 4. `InboundMessage` location (`../inbound.ts`) OK?

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { InboundMessage } from "../../inbound";
 import type { DeliveryTarget } from "../../types";
+import { buildSignedAudioUrl, signAudioKey, verifySignedAudioRequest } from "../audio-url";
 import { LIMITS } from "../config";
 import { fetchAudioContentFromLine, formatFromContentType } from "../content";
 import { ProviderMessageDedupe } from "../dedupe";
@@ -393,18 +394,198 @@ describe("LineDelivery.send() guards (§6)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  // Step 4 (audio outbound) is DEFERRED until the module lives in the real
-  // repo: hosting needs an approved AudioStore backend (e.g. Vercel Blob) and
-  // possibly an audio-serving route — both are repo-level decisions outside
-  // this standalone scaffold (kickoff §9; module README "Pending at merge
-  // time"). Until then the speech path fails loudly (§6.6) — covered by the
-  // duration-cap test above and the stubs in audio.ts.
-  it.todo(
-    "audio outbound: mp3/wav → transcodeToM4a → AudioStore.put → audio message with hosted URL + durationMs (§7) — DEFERRED to Step 4 in the real repo",
-  );
-  it.todo(
-    "oversized audio payload (LIMITS.maxAudioFileBytes, 200 MB per current docs) → refused — DEFERRED to Step 4 in the real repo",
-  );
+});
+
+// ---------- §8 / Step 4: audio outbound (§7) ----------
+
+describe("LineDelivery.send() audio outbound (§7, Step 4)", () => {
+  const SIGNED_URL =
+    "https://medbuddy.example/api/line/audio/abc.m4a?exp=1900000000000&sig=x";
+
+  const mockStore = (url = SIGNED_URL) => ({
+    put: vi.fn(async () => ({ url, expiresAt: new Date(1900000000000) })),
+  });
+
+  const speech = (overrides: Partial<{ format: "mp3" | "wav" | "m4a"; durationMs: number }> = {}) => ({
+    audio: Uint8Array.from([1, 2, 3, 4]),
+    format: "m4a" as const,
+    durationMs: 4200,
+    ...overrides,
+  });
+
+  const deliveryWithStore = (
+    store: { put: unknown },
+    fetchMock: unknown,
+  ) =>
+    new LineDelivery({
+      channelAccessToken: "test-token",
+      fetchImpl: fetchMock as typeof fetch,
+      audioStore: store as never,
+    });
+
+  it("m4a speech → AudioStore.put → push carries [text, audio] with hosted URL + duration (todo 4)", async () => {
+    const store = mockStore();
+    const { fetchMock, captured } = pushCapture(200, { sentMessages: [] });
+    const res = await deliveryWithStore(store, fetchMock).send(
+      target("elder", { channelUserId: "U-elder-1" }),
+      { text: "王伯伯,今晚的藥已說明。", speech: speech() },
+    );
+
+    expect(res).toEqual({ ok: true });
+    expect(store.put).toHaveBeenCalledTimes(1);
+    expect(store.put).toHaveBeenCalledWith(
+      Uint8Array.from([1, 2, 3, 4]),
+      "m4a",
+    );
+    const body = JSON.parse(String(captured.init?.body));
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0]).toEqual({
+      type: "text",
+      text: "王伯伯,今晚的藥已說明。",
+    });
+    expect(body.messages[1]).toEqual({
+      type: "audio",
+      originalContentUrl: SIGNED_URL,
+      duration: 4200,
+    });
+  });
+
+  it("mp3 passes through WITHOUT transcoding (verified drift: LINE accepts mp3 or m4a)", async () => {
+    const store = mockStore();
+    const { fetchMock } = pushCapture(200, { sentMessages: [] });
+    const res = await deliveryWithStore(store, fetchMock).send(
+      target("caregiver"),
+      { text: "王伯伯的語音說明。", speech: speech({ format: "mp3" }) },
+    );
+    expect(res).toEqual({ ok: true });
+    expect(store.put).toHaveBeenCalledWith(expect.any(Uint8Array), "mp3");
+  });
+
+  it("wav → unsupported-audio-format, nothing sent, nothing hosted (§6.6)", async () => {
+    const store = mockStore();
+    const { fetchMock } = pushCapture(200);
+    const res = await deliveryWithStore(store, fetchMock).send(
+      target("caregiver"),
+      { text: "王伯伯的語音說明。", speech: speech({ format: "wav" }) },
+    );
+    expect(res).toEqual({
+      ok: false,
+      reason: "unsupported-audio-format",
+      retryable: false,
+    });
+    expect(store.put).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("oversized audio payload (> 200 MB size cap) → refused, nothing sent (todo 5)", async () => {
+    const store = mockStore();
+    const { fetchMock } = pushCapture(200);
+    // Only byteLength is read before refusal — avoid allocating 200 MB.
+    const hugeAudio = {
+      byteLength: LIMITS.maxAudioFileBytes + 1,
+    } as unknown as Uint8Array;
+    const res = await deliveryWithStore(store, fetchMock).send(
+      target("caregiver"),
+      {
+        text: "王伯伯的語音說明。",
+        speech: { audio: hugeAudio, format: "m4a", durationMs: 4200 },
+      },
+    );
+    expect(res).toEqual({
+      ok: false,
+      reason: "audio-exceeds-size-limit",
+      retryable: false,
+    });
+    expect(store.put).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("AudioStore failure → audio-hosting-failed (retryable), nothing sent", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const store = {
+        put: vi.fn(async () => {
+          throw new Error("blob unavailable");
+        }),
+      };
+      const { fetchMock } = pushCapture(200);
+      const res = await deliveryWithStore(store, fetchMock).send(
+        target("caregiver"),
+        { text: "王伯伯的語音說明。", speech: speech() },
+      );
+      expect(res).toEqual({
+        ok: false,
+        reason: "audio-hosting-failed",
+        retryable: true,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it("non-HTTPS hosted URL → refused, nothing sent (health information)", async () => {
+    const store = mockStore("http://insecure.example/audio.m4a");
+    const { fetchMock } = pushCapture(200);
+    const res = await deliveryWithStore(store, fetchMock).send(
+      target("caregiver"),
+      { text: "王伯伯的語音說明。", speech: speech() },
+    );
+    expect(res).toEqual({
+      ok: false,
+      reason: "audio-url-not-https",
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- Step 4: signed short-lived audio URLs ----------
+
+describe("signed audio URLs (audio-url.ts)", () => {
+  const SECRET = "test-signing-secret";
+  const NOW = 1900000000000;
+
+  it("round-trip: built URL verifies before expiry", () => {
+    const url = new URL(
+      buildSignedAudioUrl("https://medbuddy.example/", "abc.m4a", NOW + 60_000, SECRET),
+    );
+    expect(url.pathname).toBe("/api/line/audio/abc.m4a");
+    expect(
+      verifySignedAudioRequest(
+        "abc.m4a",
+        url.searchParams.get("exp"),
+        url.searchParams.get("sig"),
+        SECRET,
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("expired → rejected", () => {
+    const exp = NOW - 1;
+    expect(
+      verifySignedAudioRequest(
+        "abc.m4a",
+        String(exp),
+        signAudioKey("abc.m4a", exp, SECRET),
+        SECRET,
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("tampered signature / wrong key / extended expiry → rejected", () => {
+    const exp = NOW + 60_000;
+    const sig = signAudioKey("abc.m4a", exp, SECRET);
+    expect(verifySignedAudioRequest("abc.m4a", String(exp), "AAAA", SECRET, NOW)).toBe(false);
+    expect(verifySignedAudioRequest("other.m4a", String(exp), sig, SECRET, NOW)).toBe(false);
+    // attacker stretches exp without re-signing:
+    expect(
+      verifySignedAudioRequest("abc.m4a", String(exp + 999_999), sig, SECRET, NOW),
+    ).toBe(false);
+    expect(verifySignedAudioRequest("abc.m4a", null, sig, SECRET, NOW)).toBe(false);
+  });
 });
 
 // ---------- §8: push (text path) ----------

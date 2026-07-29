@@ -12,6 +12,7 @@
 
 import type { GroundedItem } from "../grounding/types";
 import type { Verdict } from "../verdict/types";
+import type { IntakeDetail } from "../delivery/reminder-framing";
 
 /** Recorded at the moment a cupboard was captured. */
 export type RegimenSnapshot = {
@@ -22,6 +23,15 @@ export type RegimenSnapshot = {
   items: GroundedItem[];
   /** The verdict produced from these items, kept so a past check is explainable. */
   verdict: Verdict;
+  /**
+   * How the bag said to take each item, when a bag was read.
+   *
+   * Optional because most snapshots come from a typed list, which carries no
+   * instructions. Written by medication-bag OCR after a caregiver confirms —
+   * never derived, never defaulted. The field being absent and the field being
+   * empty mean the same thing here: the bag did not say.
+   */
+  intake?: IntakeDetail[];
 };
 
 /**

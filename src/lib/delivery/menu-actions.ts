@@ -125,6 +125,8 @@ export async function lastCheckNarration(
       // record says encouraging more walking needs a fall-risk assessment
       // this product does not have.
       conditions: findSubject(subjectId)?.conditions ?? [],
+      // Written by bag OCR; absent on a snapshot built from a typed list.
+      intake: latest.intake,
     });
   }
   // VOICE-DELIVERY-SPEC §5 — an empty narration is sent as nothing, never as a

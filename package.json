@@ -20,7 +20,8 @@
     "roles:ls": "node scripts/list-roles.mts",
     "roles:unbind": "node scripts/unbind-role.mts",
     "speech:ls": "node scripts/list-speech.mts",
-    "richmenu:ls": "node scripts/list-rich-menus.mts"
+    "richmenu:ls": "node scripts/list-rich-menus.mts",
+    "roles:card": "node scripts/send-role-card.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

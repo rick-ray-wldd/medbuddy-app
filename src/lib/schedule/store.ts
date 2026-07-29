@@ -30,13 +30,35 @@ export class InMemoryScheduleStore implements ScheduleStore {
 }
 
 const BLOB_PREFIX = "schedules/";
+const RECENT_KEY = Symbol.for("medbuddy.schedule.recent");
 
 export class BlobScheduleStore implements ScheduleStore {
+  /**
+   * ⚠️ Blob does not give read-your-writes — the same failure BlobRoleStore
+   * documents (roles/stores.ts): overwrite a path, read it back seconds
+   * later, get the old value. Observed here as: caregiver adds a slot, the
+   * refreshed card says 「目前沒有設定提醒時段」 while the write is in fact
+   * durable. Same mitigation: the most recent in-process write wins over
+   * whatever Blob reports. Same honest limit: two instances can still
+   * disagree; the real fix is a store with actual consistency, one file away
+   * behind the ScheduleStore interface.
+   */
+  private static recent(): Map<string, SubjectSchedule | null> {
+    const g = globalThis as typeof globalThis & {
+      [RECENT_KEY]?: Map<string, SubjectSchedule | null>;
+    };
+    g[RECENT_KEY] ??= new Map();
+    return g[RECENT_KEY];
+  }
+
   private pathname(subjectId: string): string {
     return `${BLOB_PREFIX}${subjectId}.json`;
   }
 
   async get(subjectId: string): Promise<SubjectSchedule | null> {
+    const recent = BlobScheduleStore.recent();
+    if (recent.has(subjectId)) return recent.get(subjectId) ?? null;
+
     const { get } = await import("@vercel/blob");
     const res = await get(this.pathname(subjectId), { access: "private" });
     if (!res || res.statusCode !== 200) return null;
@@ -49,6 +71,8 @@ export class BlobScheduleStore implements ScheduleStore {
   }
 
   async put(schedule: SubjectSchedule): Promise<void> {
+    // In-process copy first: read-your-writes within a warm instance.
+    BlobScheduleStore.recent().set(schedule.subjectId, schedule);
     const { put } = await import("@vercel/blob");
     await put(this.pathname(schedule.subjectId), JSON.stringify(schedule), {
       access: "private",
@@ -58,6 +82,7 @@ export class BlobScheduleStore implements ScheduleStore {
   }
 
   async remove(subjectId: string): Promise<void> {
+    BlobScheduleStore.recent().set(subjectId, null);
     const { del } = await import("@vercel/blob");
     await del(this.pathname(subjectId));
   }
@@ -65,14 +90,21 @@ export class BlobScheduleStore implements ScheduleStore {
   async list(): Promise<SubjectSchedule[]> {
     const { list } = await import("@vercel/blob");
     const { blobs } = await list({ prefix: BLOB_PREFIX });
-    const schedules: SubjectSchedule[] = [];
+    const recent = BlobScheduleStore.recent();
+    const bySubject = new Map<string, SubjectSchedule>();
     for (const blob of blobs) {
       const subjectId = blob.pathname
         .slice(BLOB_PREFIX.length)
         .replace(/\.json$/, "");
+      // recent-write overlay applies inside get()
       const schedule = await this.get(subjectId);
-      if (schedule) schedules.push(schedule);
+      if (schedule) bySubject.set(subjectId, schedule);
     }
-    return schedules;
+    // A schedule written moments ago may not appear in list yet at all.
+    for (const [subjectId, schedule] of recent) {
+      if (schedule) bySubject.set(subjectId, schedule);
+      else bySubject.delete(subjectId);
+    }
+    return [...bySubject.values()];
   }
 }

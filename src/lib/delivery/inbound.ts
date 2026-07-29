@@ -242,16 +242,18 @@ async function sendRemindersCard(
   channelUserId: string,
   subjectId: string,
   deps: InboundDeps,
+  /** pass the slots you just wrote to skip the (eventually-consistent) read */
+  knownSlots?: import("../schedule/types").ScheduleSlot[],
 ): Promise<void> {
   const setup = await getSetup(deps);
   const { remindersCard } = await import("./line/reminders-card");
-  const { BlobScheduleStore } = await import("../schedule/store");
-  const store = deps.scheduleStore ?? new BlobScheduleStore();
-  const schedule = await store.get(subjectId);
-  const result = await setup.pushFlex(
-    channelUserId,
-    remindersCard(schedule?.slots ?? []),
-  );
+  let slots = knownSlots;
+  if (!slots) {
+    const { BlobScheduleStore } = await import("../schedule/store");
+    const store = deps.scheduleStore ?? new BlobScheduleStore();
+    slots = (await store.get(subjectId))?.slots ?? [];
+  }
+  const result = await setup.pushFlex(channelUserId, remindersCard(slots));
   console.log("[medbuddy] reminders card sent", { channelUserId, ok: result.ok });
 }
 
@@ -405,7 +407,9 @@ async function handlePostback(
       const { addReminderSlot } = await import("./line/reminder-settings");
       const result = await addReminderSlot(subjectId, pickedTime, deps.scheduleStore);
       if (result.ok) {
-        return await sendRemindersCard(channelUserId, subjectId, deps);
+        // Render the schedule we just wrote — never re-read an eventually-
+        // consistent store to confirm its own write.
+        return await sendRemindersCard(channelUserId, subjectId, deps, result.schedule.slots);
       }
       reply = { text: result.message, fromPipeline: false };
       break;
@@ -413,8 +417,8 @@ async function handlePostback(
     case "reminder_remove": {
       const slotId = new URLSearchParams(data).get("slot") ?? "";
       const { removeReminderSlot } = await import("./line/reminder-settings");
-      await removeReminderSlot(subjectId, slotId, deps.scheduleStore);
-      return await sendRemindersCard(channelUserId, subjectId, deps);
+      const remaining = await removeReminderSlot(subjectId, slotId, deps.scheduleStore);
+      return await sendRemindersCard(channelUserId, subjectId, deps, remaining?.slots ?? []);
     }
     case "send_explanation": {
       // The caregiver-initiated outbound, from the phone instead of the web

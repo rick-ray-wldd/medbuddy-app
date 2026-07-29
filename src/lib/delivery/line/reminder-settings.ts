@@ -26,7 +26,9 @@ export async function addReminderSlot(
   subjectId: string,
   pickedTime: string | undefined,
   store: ScheduleStore = defaultStore(),
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<
+  { ok: true; schedule: SubjectSchedule } | { ok: false; message: string }
+> {
   // Client input (datetimepicker or a crafted postback) — validated like any
   // other. LINE's time mode sends "HH:mm".
   const time = (pickedTime ?? "").trim();
@@ -53,20 +55,25 @@ export async function addReminderSlot(
     ],
   };
   await store.put(schedule);
-  return { ok: true };
+  // The just-written schedule is returned so the caller can render it
+  // directly — the confirmation card must never depend on reading back a
+  // store that is only eventually consistent.
+  return { ok: true, schedule };
 }
 
 export async function removeReminderSlot(
   subjectId: string,
   slotId: string,
   store: ScheduleStore = defaultStore(),
-): Promise<void> {
+): Promise<SubjectSchedule | null> {
   const previous = await store.get(subjectId);
-  if (!previous) return;
+  if (!previous) return null;
   const remaining = previous.slots.filter((s) => s.id !== slotId);
   if (remaining.length === 0) {
     await store.remove(subjectId);
-  } else {
-    await store.put({ ...previous, slots: remaining });
+    return null;
   }
+  const schedule = { ...previous, slots: remaining };
+  await store.put(schedule);
+  return schedule;
 }

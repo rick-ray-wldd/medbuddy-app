@@ -57,3 +57,84 @@ export async function findPrerenderedSpeech(
     return undefined;
   }
 }
+
+/**
+ * Find it, or make it and keep it.
+ *
+ * ## Why this exists
+ *
+ * Pre-rendering covers a fixed list of narrations produced offline by
+ * `scripts/prerender-elder-speech.mts`. Anything outside that list arrived as
+ * text — so a reply about a medicine nobody thought to pre-render was silent,
+ * and the older adult who most needs it read nothing.
+ *
+ * The hash is what makes filling the gap safe. The file is keyed by the text
+ * it speaks, so a cached clip can only ever say the sentence that produced it.
+ * Synthesising on a miss and storing under the same key preserves that
+ * exactly: the guarantee was never "somebody checked this clip", it was
+ * "the key IS the text".
+ *
+ * ## The cost, stated
+ *
+ * The first request for a given sentence waits on Fish — measured at
+ * 2.7–4.8 s for a reply-length paragraph. Every later request for the same
+ * sentence is a Blob read. LINE retries a slow webhook, and the dedupe marks
+ * an event id before the handler runs, so a retry is dropped rather than
+ * delivered twice.
+ *
+ * Returns undefined rather than throwing on every failure path: speech is an
+ * addition to a message that is already correct as text, and a reply that
+ * arrives without audio beats one that does not arrive.
+ */
+export async function speechFor(
+  text: string,
+  deps: {
+    synthesise?: (text: string) => Promise<Uint8Array | null>;
+  } = {},
+): Promise<PrerenderedSpeech | undefined> {
+  const existing = await findPrerenderedSpeech(text);
+  if (existing) return existing;
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return undefined;
+
+  try {
+    const audio = await (deps.synthesise ?? synthesiseWithDemoVoice)(text);
+    if (!audio || audio.byteLength === 0) return undefined;
+
+    // Same 128 kbps CBR assumption the offline renderer uses, so a clip
+    // rendered either way carries the same duration in its name.
+    const durationMs = Math.round(audio.byteLength / 16);
+    const pathname = `${PRERENDERED_PREFIX}${narrationHash(text)}-${durationMs}.mp3`;
+
+    const { put } = await import("@vercel/blob");
+    await put(pathname, audio as unknown as Blob, {
+      access: "private",
+      addRandomSuffix: false,
+      contentType: "audio/mpeg",
+      // Two requests for the same new sentence race here; the bytes are the
+      // same sentence either way, so overwriting makes the race harmless.
+      allowOverwrite: true,
+    });
+
+    return { audio, format: "mp3", durationMs };
+  } catch (err) {
+    console.error("[medbuddy] speech synthesis failed — text only", {
+      error: err instanceof Error ? err.message : "unknown",
+    });
+    return undefined;
+  }
+}
+
+async function synthesiseWithDemoVoice(text: string): Promise<Uint8Array | null> {
+  const { defaultVoice } = await import("../voice/profiles");
+  const profile = defaultVoice();
+  if (!profile) return null;
+
+  const { FishVoiceProvider } = await import("../voice/fish");
+  const result = await new FishVoiceProvider().synthesise({
+    text,
+    language: "zh",
+    profile,
+  });
+  return result.ok ? result.audio : null;
+}

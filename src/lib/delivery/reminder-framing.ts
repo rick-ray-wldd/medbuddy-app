@@ -120,3 +120,72 @@ export function assertNoSelfReport(text: string): void {
     }
   }
 }
+
+/**
+ * 我的藥, in her voice.
+ *
+ * He pressed a button asking what he is taking, so this answers that — and
+ * because he pressed it, this is a reply rather than an interruption, which
+ * is why a greeting belongs here and would not belong on an unrequested push.
+ *
+ * Three parts, in the order he needs them:
+ *   1. a greeting that fits the hour
+ *   2. the rules' own narration, untouched
+ *   3. the times his family set, if they set any
+ *
+ * ## The greeting is bounded to three, on purpose
+ *
+ * Audio is keyed by the hash of its text, so every distinct greeting is a
+ * distinct clip to synthesise and store. Three buys "早/午/晚 安" — enough
+ * that it fits the day — and a fourth would buy nothing he would notice.
+ */
+const GREETINGS: { untilMinutes: number; text: string }[] = [
+  { untilMinutes: 11 * 60, text: "阿公早,今天的藥在這裡。" },
+  { untilMinutes: 18 * 60, text: "阿公午安,今天的藥在這裡。" },
+  { untilMinutes: 24 * 60, text: "阿公晚安,今天的藥在這裡。" },
+];
+
+export function greetingForHour(minutesOfDay: number): string {
+  return (
+    GREETINGS.find((g) => minutesOfDay < g.untilMinutes)?.text ?? GREETINGS[2].text
+  );
+}
+
+/**
+ * Minutes since midnight in Taipei.
+ *
+ * His day, not the server's. A Vercel lambda in Washington greeting him with
+ * 早安 at nine in the evening is the kind of wrong that makes a product feel
+ * like it is talking past you.
+ */
+export function taipeiMinutesOfDay(now: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+export function frameMyMeds(
+  narration: string,
+  options: { slotTimes: string[]; now?: Date },
+): string {
+  const greeting = greetingForHour(taipeiMinutesOfDay(options.now ?? new Date()));
+  const body = dropLeadingSalutation(narration);
+
+  const times =
+    options.slotTimes.length > 0
+      ? `\n\n每天吃藥的時間:\n${[...options.slotTimes]
+          .sort()
+          .map((t) => `・${t}`)
+          .join("\n")}\n時間到我會提醒您。`
+      : "";
+
+  // No sign-off asking him anything, and none thanking him for taking it —
+  // both would turn an answer into a small examination.
+  return `${greeting}\n\n${body}${times}\n\n有想問的再跟我說一聲就好。`;
+}

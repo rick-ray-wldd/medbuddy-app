@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assertNoSelfReport, frameReminder } from "./reminder-framing";
+import {
+  assertNoSelfReport,
+  frameMyMeds,
+  frameReminder,
+  greetingForHour,
+  taipeiMinutesOfDay,
+} from "./reminder-framing";
 
 const NARRATION = "父親好,這是您現在在吃的藥。\n【普拿疼膜衣錠500毫克】:\n退燒、止痛。";
 
@@ -89,5 +95,52 @@ describe("one voice, not two", () => {
       (k) => frameReminder(NARRATION, k).split("\n\n")[0],
     );
     expect(new Set(openings).size).toBeGreaterThan(1);
+  });
+});
+
+describe("我的藥, answered in her voice", () => {
+  const NOW_MORNING = new Date("2026-07-29T01:00:00Z"); // 09:00 Taipei
+
+  it("greets by the hour where he lives, not where the server is", () => {
+    // 09:00 in Taipei is 02:00 in Washington. A lambda greeting him 早安 at
+    // nine in the evening is a product talking past him.
+    expect(greetingForHour(taipeiMinutesOfDay(NOW_MORNING))).toContain("早");
+    expect(greetingForHour(taipeiMinutesOfDay(new Date("2026-07-29T06:00:00Z")))).toContain(
+      "午",
+    );
+    expect(greetingForHour(taipeiMinutesOfDay(new Date("2026-07-29T13:00:00Z")))).toContain(
+      "晚",
+    );
+  });
+
+  it("carries the rules' sentences and the times his family set", () => {
+    const framed = frameMyMeds(NARRATION, {
+      slotTimes: ["20:00", "08:00"],
+      now: NOW_MORNING,
+    });
+
+    expect(framed).toContain("【普拿疼膜衣錠500毫克】:");
+    // Sorted, because a list of times read aloud out of order is harder to
+    // follow than one in order.
+    expect(framed.indexOf("08:00")).toBeLessThan(framed.indexOf("20:00"));
+  });
+
+  it("says nothing about times when nobody set any", () => {
+    const framed = frameMyMeds(NARRATION, { slotTimes: [], now: NOW_MORNING });
+    expect(framed).not.toContain("每天吃藥的時間");
+    // And still refuses to invent one.
+    for (const invented of ["早上", "睡前", "一天三次"]) {
+      expect(framed, invented).not.toContain(invented);
+    }
+  });
+
+  it("asks him nothing and grades him on nothing", () => {
+    const framed = frameMyMeds(NARRATION, {
+      slotTimes: ["08:00"],
+      now: NOW_MORNING,
+    });
+    expect(() => assertNoSelfReport(framed)).not.toThrow();
+    expect(framed).not.toContain("謝謝");
+    expect(framed).not.toContain("很棒");
   });
 });

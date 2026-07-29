@@ -101,7 +101,27 @@ export async function lastCheckNarration(
   if (!latest) return furniture("nothing_yet");
 
   const outcome = await narrate(latest.verdict, role, null, knownMedicines);
-  const text = outcome.narration.segments.map((s) => s.text).join("\n");
+  const narration = outcome.narration.segments.map((s) => s.text).join("\n");
+
+  // The elder pressed a button asking what he is taking, so he gets it in his
+  // granddaughter's register, with the times his family set. The caregiver
+  // reading the same verdict gets it plain — the framing is for him.
+  let text = narration;
+  if (role === "elder" && narration.trim()) {
+    const { frameMyMeds } = await import("./reminder-framing");
+    const { BlobScheduleStore, InMemoryScheduleStore } = await import(
+      "../schedule/store"
+    );
+    const store = process.env.BLOB_READ_WRITE_TOKEN
+      ? new BlobScheduleStore()
+      : new InMemoryScheduleStore();
+    const schedule = await store.get(subjectId).catch(() => null);
+    text = frameMyMeds(narration, {
+      slotTimes: (schedule?.slots ?? [])
+        .filter((slot) => slot.enabled)
+        .map((slot) => slot.timeOfDay),
+    });
+  }
   // VOICE-DELIVERY-SPEC §5 — an empty narration is sent as nothing, never as a
   // default sentence.
   return { text: text.trim(), fromPipeline: true };

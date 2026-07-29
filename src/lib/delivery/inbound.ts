@@ -642,8 +642,10 @@ async function push(
     });
 
   // Voice when an exact pre-rendered match exists; text-only otherwise.
-  const { findPrerenderedSpeech } = await import("./prerendered-speech");
-  const speech = await findPrerenderedSpeech(text);
+  // Cached clip if we have one, synthesised and kept if we do not. The hash
+  // is the key, so a clip can only ever say the sentence that produced it.
+  const { speechFor } = await import("./prerendered-speech");
+  const speech = await speechFor(text);
 
   const result = await delivery.send(
     {

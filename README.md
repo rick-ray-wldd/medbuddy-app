@@ -15,6 +15,8 @@ medications.
 
 **Live:** https://medbuddy-app.vercel.app
 
+**LINE bot:** [Add MedBuddy on LINE](https://line.me/R/ti/p/@134cwbvt)
+
 Locally:
 
 ```bash
@@ -55,8 +57,9 @@ Claude transcription → evidence validator → review-only draft
 ```
 
 The review demo is intentionally one fixed care pair: two configured LINE
-accounts, one `subj-father` record, and role-specific 2×2 rich menus. The web
-page is the observable hub: it shows link state and shared-log activity without
+accounts, one `subj-father` record, an elder 2×2 rich menu, and a caregiver
+3×2 rich menu. The web page is the observable hub: it shows link state and
+shared-log activity without
 returning either opaque LINE user ID to the browser. Runtime links use the
 origin that received the webhook, so an old local Vercel link cannot silently
 send one phone to another project.
@@ -89,6 +92,7 @@ change to a medication-safety rule is diffable and reviewable.
 | [`docs/MEDICATION-BAG-OCR-MIGRATION.md`](./docs/MEDICATION-BAG-OCR-MIGRATION.md) | Evidence-only OCR contract, implemented web draft, and the remaining confirmation/LINE migration |
 | [`src/lib/README.md`](./src/lib/README.md) | Module seams |
 | [`NOTES.md`](./NOTES.md) | Build log — what broke, what the AI wrote and what I rejected |
+| [`SUBMISSION.md`](./SUBMISSION.md) | Copy-ready AI Fund reply template, public links, access notes, and contribution disclosures |
 
 ## Status
 

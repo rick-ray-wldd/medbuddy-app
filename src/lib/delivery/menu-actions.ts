@@ -143,40 +143,54 @@ export async function recentQuestions(subjectId: string): Promise<ActionReply> {
 /**
  * When to take what.
  *
- * Reads dosing times captured from medication bags. Nothing else in the
- * product knows a dosing time — the register holds indications, not
- * schedules — so until bag OCR lands this has no source and says so.
+ * Reads the schedule the caregiver configured, which is the only place a
+ * dosing time exists in this product — the register holds indications, not
+ * schedules.
  *
- * **It does not fall back to a plausible schedule.** 「早上一顆、晚上一顆」
- * assembled from nothing would be a product inventing a prescription, and a
- * person would follow it. An empty answer is a gap; a guessed one is a hazard.
+ * ## This used to read somewhere else, and showed him nothing
+ *
+ * The first version read a `dosing` field on the medication snapshot, on the
+ * plan that bag OCR would populate it. The caregiver's reminder feature landed
+ * meanwhile and put its times in `SubjectSchedule`. Both shipped, neither was
+ * wrong on its own, and 用藥提醒 answered 「還沒有用藥時間的資料」 while the
+ * caregiver was looking at four slots she had just set.
+ *
+ * Two writers, two readers, no overlap. The fix is to read what is actually
+ * written.
+ *
+ * **It still does not invent a schedule.** No slots configured means no slots
+ * shown — 「早上一顆、晚上一顆」 assembled from nothing is the product writing
+ * a prescription, and he would follow it.
  */
 export async function dosingSchedule(subjectId: string): Promise<ActionReply> {
-  const { getRegistry } = await import("../registry");
-  const { logStore } = getRegistry();
-  const log = await logStore.read(subjectId);
-  const latest = log.snapshots.at(-1);
+  const { BlobScheduleStore, InMemoryScheduleStore } = await import("../schedule/store");
+  const store = process.env.BLOB_READ_WRITE_TOKEN
+    ? new BlobScheduleStore()
+    : new InMemoryScheduleStore();
 
-  if (!latest) return furniture("nothing_yet");
+  const schedule = await store.get(subjectId).catch(() => null);
+  const slots = (schedule?.slots ?? []).filter((s) => s.enabled);
 
-  // `dosing` is written by bag OCR. Optional on the type, absent everywhere
-  // until that ships, which is why this reads defensively rather than
-  // assuming the field.
-  const withTimes = latest.items.filter(
-    (item) => (item as { dosing?: unknown }).dosing !== undefined,
-  );
-
-  if (withTimes.length === 0) {
+  if (slots.length === 0) {
     return {
       text:
-        "還沒有用藥時間的資料。\n\n" +
-        "用藥時間是從藥袋上讀來的,照顧者用「紀錄用藥」拍過藥袋之後,這裡就會列出每天什麼時候吃、飯前還是飯後。\n\n" +
-        "沒有資料的時候我不會自己編一個時間表。",
+        "還沒有設定用藥時間。\n\n" +
+        "家人在「服藥提醒」設定好時間之後,這裡就會列出每天什麼時候該吃藥。\n\n" +
+        "沒有設定的時候我不會自己排一個時間。",
       fromPipeline: false,
     };
   }
 
-  // Deliberately unreachable until OCR writes `dosing`. Left as the seam
-  // rather than as a comment so the shape is settled before the data arrives.
-  return { text: "", fromPipeline: false };
+  const { findSubject } = await import("../subjects");
+  const name = findSubject(subjectId)?.displayName ?? "";
+  const lines = [...slots]
+    .sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay))
+    .map((s) => `・${s.timeOfDay}`);
+
+  return {
+    text:
+      `${name}每天的吃藥時間:\n\n${lines.join("\n")}\n\n` +
+      `時間到我會提醒您。要改時間的話,跟家人說一聲就好。`,
+    fromPipeline: false,
+  };
 }

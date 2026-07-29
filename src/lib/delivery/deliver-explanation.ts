@@ -1,6 +1,7 @@
 import { getRegistry } from "../registry";
 import { buildVerdict } from "../verdict/build";
 import { narrate } from "../narration/narrate";
+import { assertNoSelfReport, frameReminder, type Framing } from "./reminder-framing";
 import { findSubject } from "../subjects";
 import { FishVoiceProvider } from "../voice/fish";
 import type { VoiceProfile } from "../voice/types";
@@ -38,6 +39,14 @@ export async function deliverExplanationToElder(
     items: { text: string; source?: ItemSource }[];
     to: string;
     voiceProfile: VoiceProfile | null;
+    /**
+     * "reminder" wraps the narration in a granddaughter's greeting and
+     * sign-off. The medical sentences are unchanged either way — see
+     * reminder-framing.ts for why only the frame may be casual.
+     */
+    framing?: Framing;
+    /** Stable per-slot key so the same slot greets the same way each day. */
+    framingKey?: string;
   },
   deps: DeliverExplanationDeps = {},
 ): Promise<ExplanationOutcome> {
@@ -68,7 +77,14 @@ export async function deliverExplanationToElder(
   const outcome = await narrate(verdict, "elder", null, knownMedicines);
 
   // VERBATIM join; empty narration → send NOTHING (VOICE-DELIVERY-SPEC §5).
-  const text = outcome.narration.segments.map((s) => s.text).join("\n");
+  const narration = outcome.narration.segments.map((s) => s.text).join("\n");
+  // Framed AFTER the verbatim join, so the rules' words travel untouched and
+  // only a greeting is added around them.
+  const text =
+    opts.framing === "reminder" && narration.trim()
+      ? frameReminder(narration, opts.framingKey ?? opts.subjectId)
+      : narration;
+  if (opts.framing === "reminder" && text.trim()) assertNoSelfReport(text);
   if (!text.trim()) {
     return {
       delivery: { ok: false, reason: "empty-narration", retryable: false },

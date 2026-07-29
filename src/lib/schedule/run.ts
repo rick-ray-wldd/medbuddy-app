@@ -34,8 +34,26 @@ export type RunSummary = {
 export async function runScheduledDeliveries(deps: RunDeps): Promise<RunSummary> {
   const clock = deps.clock ?? taipeiClock();
   const deliver = deps.deliver ?? deliverExplanationToElder;
+  // Same correction as the summary QR: the binding is who he said he was, the
+  // environment variable is a deployment convenience that predates the card.
+  // Resolved once per tick rather than per slot.
+  let boundElder: string | null = null;
+  if (!deps.elderRecipient) {
+    boundElder = await (async () => {
+      try {
+        const { getRegistry } = await import("../registry");
+        const found = await getRegistry().roleStore.findByRole(
+          (await deps.store.list())[0]?.subjectId ?? "",
+          "elder",
+        );
+        return found?.channelUserId ?? null;
+      } catch {
+        return null;
+      }
+    })();
+  }
   const elderRecipient =
-    deps.elderRecipient ?? (() => recipientForDemoRole("elder"));
+    deps.elderRecipient ?? (() => boundElder ?? recipientForDemoRole("elder"));
 
   const summary: RunSummary = { attempted: [], skippedLate: [] };
 
@@ -69,6 +87,8 @@ export async function runScheduledDeliveries(deps: RunDeps): Promise<RunSummary>
           items: subject.cupboard,
           to,
           voiceProfile: defaultVoice() ?? null,
+          framing: "reminder" as const,
+          framingKey: slot.id,
         });
       }
 

@@ -322,7 +322,7 @@ recovery, not a production consent or authorization model.
 | FR-05 | OCR transcribes medication-bag evidence without identifying a drug from appearance or filling missing fields. | **Partial, bounded** | Fields carry value/status/evidence and the API writes no log entry, but validation proves only self-consistency inside the model response, not correspondence to image pixels; provenance fields and the live route lack complete tests. |
 | FR-06 | OCR content reaches 「我的藥」 only after caregiver review and the ordinary medication-check path. | **Partial** | Embedded draft → editable list → check exists, but `rx` currently becomes `unknown`; standalone `/bag` does not hand off. Seeded snapshots demonstrate intake rendering, but the normal OCR confirmation path does not persist intake details. |
 | FR-07 | Medication names are grounded and uncertainty is retained before rules or narration. | **Built, bounded** | Resolution uses the loaded TFDA datasets; ambiguous/no-match items remain unresolved. This is name matching, not identity verification. |
-| FR-08 | Findings quote their source and direct the user to a pharmacist or physician without prescribing. | **Built, bounded** | The prototype implements 8 of 133 STOPP-derived rules and 3 TFDA health-food warning rules. Conditions are seeded; coverage is not comprehensive. |
+| FR-08 | Findings preserve source, limits, and pharmacist-versus-physician escalation without prescribing. | **Verdict layer Built; elder projection Partial / P0** | The verdict implements 8 of 133 STOPP-derived rules and 3 TFDA health-food warning rules with structured provenance. The current warm elder projection discards source/limits/count/severity and may downgrade `consult_physician` to a generic pharmacist prompt; conditions are seeded and coverage is not comprehensive. |
 | FR-09 | 「我的藥」 uses the most recent medication-check snapshot and a safe role-specific projection. | **Partial / P0** | The latest snapshot is read, but the new elder warm projection can drop unresolved items and safety context, substitute seeded intake for verdict items, infer packet/meal mapping, add ungrounded advice, and lose finding count/severity/escalation. Focused warning tests exist but do not cover those invariants. It must be called “latest check,” not “verified/current.” |
 | FR-10 | A caregiver can add/remove bounded reminder times in LINE and web. | **Built** | Maximum four slots, valid `HH:mm`, at least 60 minutes apart, explicit empty schedule, and no invented default time. |
 | FR-11 | A configured reminder reaches the elder once, near its configured time, as text plus optional Serin audio. | **Partial** | Due/idempotency and delivery are tested; production-frequency triggering, latest-snapshot input, end-to-end delivery monitoring, user-facing AI/non-family disclosure, and removal of unmodeled self-report prompts and ungrounded advice remain open. |
@@ -538,3 +538,86 @@ requirement → user job → current surface → automated/manual evidence
 
 Do not upgrade a status based on a script, screenshot, or mocked provider alone.
 The status changes only when the stated acceptance condition is demonstrated.
+
+---
+
+## 13. The path to a broader chronic-care product
+
+The roadmap above lists what must be fixed. This section answers the different
+question the challenge asks: **what does this become if it works?**
+
+### 13.1 What the wedge actually buys
+
+Medication comprehension is not the product. It is the only reason a family
+will maintain a record at all.
+
+Every chronic-care product needs a truthful picture of what is happening
+between appointments, and every one of them fails at the same place: **nobody
+keeps it up to date.** Symptom diaries are abandoned in a fortnight. Adherence
+apps ask a question people do not want to answer. The record decays, and a
+decayed record is worse than none because it is trusted.
+
+MedBuddy asks for the two things a family already does:
+
+| Already happens | What the product takes from it |
+| --- | --- |
+| A caregiver worries out loud after a visit | A typed observation, in their own words |
+| Somebody photographs a medication bag | A regimen with dispensing dates |
+
+Neither is a new habit. That is the whole bet: **the log is a by-product of
+something with its own reason to exist, so it stays current.** What accumulates
+is a longitudinal record of a person's medicines and their family's
+observations — which is the substrate every chronic-care feature below needs
+and none of them can bootstrap on their own.
+
+### 13.2 Three expansions the existing architecture already admits
+
+Each is a new rule set or a new reader over the same verdict. None requires
+changing what narration may say.
+
+**1. Condition-specific rule sets.** The engine holds no medication knowledge —
+it interprets shapes in versioned JSON (`src/lib/rules/engine.ts`). A
+heart-failure rule set, a CKD dosing set, or a diabetes hypoglycaemia set is a
+new file with the same shape and the same severity ceiling. What does *not*
+change: severity can still only escalate to a pharmacist or a physician.
+
+**2. More readers of the same record.** The clinician sheet is one projection
+of `SubjectLog`. A discharge summary, a pharmacist reconciliation view, and a
+home-care nurse handover are three more — same data, different ordering, and
+the ordering is where the product knowledge lives (§12.6 of the TDD orders the
+observation table by what changes a prescription, not by time).
+
+**3. Institutional care.** `RoleBinding` already separates *who is holding the
+phone* from *whose medicines these are*. A carer holding twelve residents is
+twelve bindings, and the constraint that made the demo safe — a finding must
+never attach to the wrong person — is the constraint that makes the facility
+case possible rather than a rewrite.
+
+### 13.3 What must be true before any of that
+
+In order, and none of them optional:
+
+1. **A real database.** Blob has no read-your-writes guarantee and it has
+   already produced four distinct failures (TDD §8). `LogStore`, `RoleStore`
+   and `ScheduleStore` exist so this is one file each.
+2. **Authentication and consent semantics.** Today any caller with a subject id
+   can read a summary. Retention, correction, deletion and subject visibility
+   are undefined, and they are prerequisites for holding a real person's record
+   rather than features to add later.
+3. **Evaluated grounding.** 8 of 133 STOPP criteria and three health-food
+   signals is a demonstration, not coverage. A gold set and a measured
+   false-negative rate come before any claim of completeness — and before
+   adding a second condition, because a rule set nobody measured is a rule set
+   nobody can trust.
+
+### 13.4 What this deliberately never becomes
+
+- **Not a diagnostic.** Clinical judgement ends at the verdict object and the
+  verdict only ever escalates to a human. Adding a condition adds rules, never
+  conclusions.
+- **Not an adherence enforcer.** The product does not ask whether he took
+  anything, and it will not, at any scale. Shame closes the channel that every
+  other feature depends on.
+- **Not a memory system about a person's decline.** P3's continuity layer must
+  be inspectable, attributable, correctable and deletable *by him*, or it is a
+  file kept on someone rather than a record kept for them.

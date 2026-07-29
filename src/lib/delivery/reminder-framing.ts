@@ -211,6 +211,21 @@ function intakeLines(items: IntakeDetail[]): string {
  */
 const MOVEMENT_ASIDE = "有空的話起來走一走,不要坐太久。";
 
+/**
+ * What she calls him.
+ *
+ * `subject.displayName` is 「父親」 — the caregiver's word for him, correct on
+ * her dashboard and wrong in his ear. Pressing 我的藥 greeted him as 阿公 and
+ * pressing 用藥提醒 called him 父親, which is two people talking again, and
+ * this time about who he is rather than what to take.
+ *
+ * A constant rather than a field: this is the granddaughter's register, and
+ * every string in this file belongs to her. A real deployment would ask the
+ * family what he is called and store it — that is a product decision, and the
+ * one thing it must not be is whatever the caregiver happened to type.
+ */
+export const ELDER_ADDRESS = "阿公";
+
 const NO_MOVEMENT_ADVICE: string[] = ["recurrent_falls"];
 
 export function movementAsideFor(conditions: readonly string[]): string {

@@ -199,6 +199,9 @@ export async function recentQuestions(subjectId: string): Promise<ActionReply> {
  */
 export async function dosingSchedule(subjectId: string): Promise<ActionReply> {
   const { BlobScheduleStore, InMemoryScheduleStore } = await import("../schedule/store");
+  const { ELDER_ADDRESS, greetingForHour, taipeiMinutesOfDay } = await import(
+    "./reminder-framing"
+  );
   const store = process.env.BLOB_READ_WRITE_TOKEN
     ? new BlobScheduleStore()
     : new InMemoryScheduleStore();
@@ -209,23 +212,35 @@ export async function dosingSchedule(subjectId: string): Promise<ActionReply> {
   if (slots.length === 0) {
     return {
       text:
-        "還沒有設定用藥時間。\n\n" +
-        "家人在「服藥提醒」設定好時間之後,這裡就會列出每天什麼時候該吃藥。\n\n" +
-        "沒有設定的時候我不會自己排一個時間。",
+        `${ELDER_ADDRESS},您的吃藥時間還沒設定好。\n\n` +
+        "等家人設定好,我就會在時間到的時候提醒您。\n\n" +
+        "還沒設定的話,我不會自己排一個時間。",
       fromPipeline: false,
     };
   }
 
-  const { findSubject } = await import("../subjects");
-  const name = findSubject(subjectId)?.displayName ?? "";
-  const lines = [...slots]
-    .sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay))
-    .map((s) => `・${s.timeOfDay}`);
+  const times = [...slots].map((s) => s.timeOfDay).sort();
+  const minutesNow = taipeiMinutesOfDay(new Date());
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const upcoming = times.findIndex((t) => toMinutes(t) > minutesNow);
+  const nextLine =
+    upcoming === -1
+      ? `明天${times[0]} 的時候我會再叫您一次。`
+      : `等等${times[upcoming]} 的時候我會叫您。`;
+
+  // The greeting is shared with 我的藥 so the two buttons sound like the same
+  // person — pressing one and then the other used to change who he was.
+  const greeting = greetingForHour(minutesNow);
 
   return {
     text:
-      `${name}每天的吃藥時間:\n\n${lines.join("\n")}\n\n` +
-      `時間到我會提醒您。要改時間的話,跟家人說一聲就好。`,
+      `${greeting}\n\n` +
+      `${ELDER_ADDRESS}每天吃藥的時間是這幾個:\n${times.map((t) => `・${t}`).join("\n")}\n\n` +
+      `${nextLine}\n\n` +
+      "要改時間的話跟家人說一聲就好,不用自己弄。",
     fromPipeline: false,
   };
 }

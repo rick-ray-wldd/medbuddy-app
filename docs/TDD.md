@@ -1,8 +1,8 @@
 # MedBuddy — Technical Design Document
 
 本文件描述 MedBuddy 的技術事實、目標設計與尚未解決的風險。產品需求以
-`docs/PRD.md` 為準；程式行為以目前 repository HEAD 為準。本次盤點基準為
-2026-07-29 的 `de4784f`。
+`docs/PRD.md` 為準。本次程式行為盤點基準為 2026-07-29 的 `de4784f`；其後的
+`24e6f72` 只修改文件，沒有改變這份技術基準。
 
 本專案是 review prototype，不是 production-ready 醫療系統。未完成的認證、
 授權、資料生命週期、交易一致性與供應商治理，不得用「Demo」一詞略過。
@@ -904,52 +904,54 @@ only “no encoded finding among resolved items,” never “safe.”
 
 ---
 
-## 13. Where everything lives
+## Appendix C — Implementation map
 
 Paths are relative to the repository root. Every feature below can be read
-end to end by following its row.
+end to end by following its row. This appendix is a navigation aid, not a list
+of guarantees; Current status and known violations remain authoritative in
+§1–§10.
 
-### 13.1 The medical core — nothing in here knows about LINE, HTTP, or a screen
+### C.1 The medical core
 
-| Concern | Path | What it guarantees |
+| Concern | Path | Responsibility / known limit |
 | --- | --- | --- |
-| Name normalisation | `src/lib/grounding/normalize.ts` | 5mg and 50mg stay distinct |
-| Resolution | `src/lib/grounding/resolve.ts` | Three unresolved kinds; reverse substring matching confined to health foods |
-| Rule evaluation | `src/lib/rules/engine.ts` | `assertRuleSetIsSafe` throws on any severity outside consult-a-human |
-| Rule shapes | `src/lib/rules/types.ts` | `Finding.verbatim` is the source's own wording |
+| Name normalisation | `src/lib/grounding/normalize.ts` | Tested strength tokens remain distinct; this is not physical-product identity verification |
+| Resolution | `src/lib/grounding/resolve.ts` | Three unresolved kinds; canonical ambiguity limits are in §4.2 |
+| Rule evaluation | `src/lib/rules/engine.ts` | Deterministic evaluation; runtime schema/reference validation is incomplete (§7.3) |
+| Rule shapes | `src/lib/rules/types.ts` | Finding provenance fields; warm projection currently discards part of this contract |
 | The verdict | `src/lib/verdict/build.ts`, `.../types.ts` | `outcomeOf` separates "checked, nothing found" from "nothing checkable" |
-| Narration | `src/lib/narration/narrate.ts` | Receives a verdict; holds no register access |
-| Narration validation | `src/lib/narration/validate.ts` | Structural and lexical — **not** semantic; see §4 |
+| Narration | `src/lib/narration/narrate.ts` | Receives a verdict; the elder warm path later replaces its output (§2.5) |
+| Narration validation | `src/lib/narration/validate.ts` | Structural and lexical — **not** semantic; fail-open gap in §7 |
 | Committed rule sets | `config/rules/stopp-v3.json`, `.../tfda-health-food-warnings.json`, `.../drug-classes.json` | Diffable; every safety change is a reviewable commit |
-| Registers | `data/tfda-drugs.json` (23,211), `data/tfda-health-foods.json` (464) | Licence and retrieval date carried in the file |
+| Registers | `data/tfda-drugs.json`, `data/tfda-health-foods.json` | Repository snapshots; health-food rows include permits marked expired (§4.2) |
 
-### 13.2 Inputs
+### C.2 Inputs
 
 | Input | Path | Guarantee |
 | --- | --- | --- |
 | Typed list | `src/app/api/check/route.ts`, `src/app/check-client.tsx` | — |
-| Caregiver paragraph | `src/lib/observations/parse.ts` | Every note verbatim in what they typed, or discarded |
+| Caregiver paragraph | `src/lib/observations/parse.ts` | Accepted spans are whitespace-normalized containment; partial extraction can lose sibling text |
 | ↳ model boundary | `src/lib/observations/gemini.ts` | Injectable; tests run offline |
 | Bag photograph | `src/lib/ocr/claude.ts` | Claude Sonnet transcribes; forced through a tool schema |
-| ↳ the check | `src/lib/ocr/validate.ts` | A value must appear in the evidence it cites |
+| ↳ the check | `src/lib/ocr/validate.ts` | Model-response self-consistency, not pixel provenance |
 | ↳ field shapes | `src/lib/ocr/types.ts` | Status per field; **no confidence score** |
 | ↳ intake API | `src/app/api/ocr/bag/route.ts` | Returns a draft, never writes a record |
 | ↳ camera / upload UI | `src/app/bag-capture.tsx`, `src/app/bag/` | Appends to the same textarea as typing |
 | Speech in | `src/app/speech.tsx` | Browser dictation, zh-TW |
 
-### 13.3 Storage
+### C.3 Storage
 
 | Record | Path | Note |
 | --- | --- | --- |
-| Interfaces | `src/lib/log/types.ts`, `src/lib/roles/types.ts`, `src/lib/schedule/store.ts` | The seams that make Postgres one file each |
-| Log | `src/lib/log/blob-store.ts`, `.../memory-store.ts` | `appendObservations` batches — see §12.5 |
+| Interfaces | `src/lib/log/types.ts`, `src/lib/roles/types.ts`, `src/lib/schedule/store.ts` | Persistence seams; migration still requires lifecycle and transaction design |
+| Log | `src/lib/log/blob-store.ts`, `.../memory-store.ts` | `appendObservations` batches one paragraph; concurrent calls may still clobber |
 | Diffing | `src/lib/log/diff.ts` | Computed from two snapshots, never stored |
 | Role bindings | `src/lib/roles/stores.ts` | In-process overlay narrows a stale-read window it does not close |
 | Binding rule | `src/lib/roles/bind.ts` | Elder-terminal, flagged |
 | Schedules | `src/lib/schedule/store.ts`, `.../types.ts`, `.../due.ts` | ≤4 slots, ≥60 min apart, quiet hours |
 | Wiring | `src/lib/registry.ts` | Held on `globalThis`; Blob when configured, memory otherwise |
 
-### 13.4 LINE
+### C.4 LINE
 
 | Concern | Path |
 | --- | --- |
@@ -970,12 +972,12 @@ end to end by following its row.
 | Demo broadcast | `src/lib/delivery/line/broadcast.ts` |
 | Reminder cards | `src/lib/delivery/line/reminders-card.ts`, `.../reminder-settings.ts` |
 
-### 13.5 Voice
+### C.5 Voice
 
 | Concern | Path |
 | --- | --- |
 | Provider | `src/lib/voice/fish.ts` |
-| Consent records | `src/lib/voice/profiles.ts` |
+| Voice profile attestations | `src/lib/voice/profiles.ts` |
 | **Find-or-synthesise, keyed by text** | `src/lib/delivery/prerendered-speech.ts` — `speechFor` |
 | **What is spoken** | `src/lib/delivery/reminder-framing.ts` |
 | ↳ reminder framing | `frameReminder`, `assertNoSelfReport` |
@@ -985,7 +987,7 @@ end to end by following its row.
 | Serving route | `src/app/api/line/audio/[key]/route.ts` |
 | Offline pre-render | `scripts/prerender-elder-speech.mts` |
 
-### 13.6 Clinician handoff
+### C.6 Clinician handoff
 
 | Concern | Path |
 | --- | --- |
@@ -997,8 +999,9 @@ end to end by following its row.
 | Mint + deliver | `src/lib/summary/deliver-qr-to-line.ts` |
 | QR image route (checks the token) | `src/app/api/summary/qr/[token]/route.ts` |
 | What the doctor sees | `src/app/summary/s/[token]/page.tsx` |
+| Anonymous direct view (current bypass) | `src/app/summary/[subjectId]/page.tsx` |
 
-### 13.7 Scheduling
+### C.7 Scheduling
 
 | Concern | Path |
 | --- | --- |
@@ -1009,7 +1012,7 @@ end to end by following its row.
 | Caregiver UI | `src/app/schedule-card.tsx`, `src/app/api/schedule/route.ts` |
 | Content path | `src/lib/delivery/deliver-explanation.ts` |
 
-### 13.8 Dashboard
+### C.8 Dashboard
 
 | Concern | Path |
 | --- | --- |
@@ -1017,7 +1020,7 @@ end to end by following its row.
 | **The elder's phone, rendered** | `src/app/elder-preview.tsx`, `src/app/api/preview/elder/route.ts` |
 | Pair status | `src/lib/hub/status.ts` |
 
-### 13.9 Operational scripts
+### C.9 Operational scripts
 
 Read-only unless marked. All take `--apply` or credentials explicitly.
 
@@ -1034,20 +1037,21 @@ Read-only unless marked. All take `--apply` or credentials explicitly.
 | `scripts/ingest-tfda.mts` | Rebuild the registers from data.gov.tw |
 | `scripts/probe-role-store.mts`, `scripts/probe-terminal-rule.mts` | Reproduce the Blob consistency failures |
 
-### 13.10 Tests
+### C.10 Tests
 
-31 test files, 325 passing, 5 skipped. The skipped ones are live-network
-probes and self-skip without credentials.
+Use `npm test` for the current count. Live-network probes self-skip without
+credentials; a green default suite does not verify deployed providers or the
+production integration paths listed in §10.3.
 
 | The claim you want checked | File |
 | --- | --- |
 | Narration cannot introduce a drug | `src/lib/narration/narrate.test.ts` |
 | Validator catches an unsupported claim | `src/lib/narration/narrate.test.ts` — the validator has no separate test file; its cases live with the narrator it guards |
-| A caregiver's words survive intact | `src/lib/observations/parse.test.ts` |
-| OCR cannot infer from an indication | `src/lib/ocr/validate.test.ts` |
+| Observation containment and fallback behavior | `src/lib/observations/parse.test.ts` |
+| OCR model-response consistency checks | `src/lib/ocr/validate.test.ts` |
 | Elder-terminal, and the flag | `src/lib/roles/bind.test.ts` |
 | A menu is not an authorisation boundary | `src/lib/delivery/__tests__/inbound-roles.test.ts` |
-| No link ever reaches the elder | `src/lib/delivery/line/rich-menu.test.ts` |
-| A reminder never asks or grades him | `src/lib/delivery/reminder-framing.test.ts` |
+| Rich-menu and adapter link guards | `src/lib/delivery/line/rich-menu.test.ts`, `src/lib/delivery/line/__tests__/line-adapter.test.ts` |
+| Reminder/warm framing branches (not full production safety) | `src/lib/delivery/reminder-framing.test.ts` |
 | Four observations are stored as four | `src/lib/log/append-batch.test.ts` |
-| The QR is addressed from a binding | `src/lib/summary/deliver-qr-to-line.test.ts` |
+| QR delivery orchestration with injected adapters; proxy route remains untested | `src/lib/summary/deliver-qr-to-line.test.ts` |

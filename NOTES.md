@@ -229,3 +229,44 @@ documentation drifts optimistic.** Every false claim was a true statement about
 what I intended, written before or instead of checking what the code did.
 
 <!-- append below, newest at the bottom -->
+
+### H33–H35 — the role card, and two rules that stopped being prose
+
+Built the first-contact card and both rich menus. The interesting part was not
+the Flex JSON; it was noticing that two constraints written in the spec were
+only being honoured by *not drawing a button*, which is not the same as
+enforcing them.
+
+**A postback is client input.** LINE signs the webhook envelope, so a valid
+signature proves the events came from LINE — not that the user pressed
+something we drew. The elder's menu has no 「切換身分」 cell, but
+`action=bind&role=caregiver` is a string anybody can send. If it were honoured,
+he would land on the surface that shows what his family reported about him,
+in their words, about him, without his having been asked. That surface existing
+at all depends on his never reaching it. So `bindRole` refuses the transition
+server-side and logs it loudly, because nothing legitimate can produce it.
+
+The rule is asymmetric on purpose: caregiver → elder stays open. Setup has one
+person holding two phones and getting them the wrong way round is the obvious
+mistake, so the recoverable direction stays recoverable. That leaves a real
+hole — a caregiver who binds their own phone as elder cannot undo it from LINE,
+and there is no operator surface in this build. It is the correct side to fail
+on, and it is written down rather than hidden.
+
+**A menu cell is a link nailed to the wall.** §6.1 already refused to send an
+elder a link. `assertNoLinksForElder` now throws if his menu ever gains a `uri`
+action, and a test adds one to prove it fires.
+
+Two smaller things worth recording:
+
+- **Icons were drawn by grid position**, so the caregiver's menu came out with
+  a pill beside 記一件事 and a magnifier beside 產生回診單. The justification for
+  having icons at all is that they are read faster than the label; one that
+  contradicts its label costs more than no icon. Now keyed by name.
+- **`resolveDeps` built the LINE client eagerly**, on paths that only needed the
+  role store. Two of 守豐's tests went red — and the way they failed was the
+  dangerous kind: the throw landed in the outer catch and looked like a message
+  that had simply produced no reply. Split into two lazy getters.
+
+Left off the menu on purpose: 拍藥袋. Bag OCR is specified and not built, and a
+cell that does nothing reads to an older adult as though *he* did it wrong.

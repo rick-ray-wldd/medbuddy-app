@@ -277,9 +277,28 @@ content, and editing it would defeat the purpose.
 
 **Built:** inbound text → pipeline → reply; outbound caregiver-initiated
 delivery; audio hosting; signature, dedupe, verbatim delivery, link refusal.
+**The role card and both rich menus** — `follow` sends the card, a postback
+binds the role and links that role's menu, and the binding is stored
+(`src/lib/roles/`). Every cell on both menus is wired to an implemented action.
 
-**Not built:** the role card and every rich menu, quick reply and LIFF surface
-above; the pairing flow; 再唸一次; 找家人; STT for inbound voice.
+**Not built:** the pairing flow (§4 step 2); STT for inbound voice; quick
+replies; the LIFF webview — 開啟網頁 currently opens the plain web surface.
+拍藥袋 is absent from the caregiver's menu **on purpose**: bag OCR is specified
+in `docs/MEDICATION-BAG-OCR-MIGRATION.md` and not implemented, and a menu cell
+that does nothing reads to an older adult as *he* did something wrong.
+
+**Two rules moved from prose into code**, which is the part of this worth
+reading:
+
+- `assertNoLinksForElder` (`rich-menu.ts`) throws if the elder's menu ever
+  gains a `uri` action. §6.1 refused to send him a link; a menu cell is a link
+  that is permanently on screen.
+- `bindRole` (`roles/bind.ts`) refuses any postback moving a user from `elder`
+  to `caregiver`. Postback data is client input — LINE signs the webhook
+  envelope, not the intent inside it — so omitting the button is not the same
+  as preventing the transition. The caregiver surface holds what the family
+  wrote about him; that surface existing at all depends on his never reaching
+  it.
 
 **Account verification is a prerequisite, not a polish item.** An unverified
 LINE official account displays a banner above every conversation warning the

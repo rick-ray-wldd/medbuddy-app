@@ -18,6 +18,8 @@ import {
 import { InMemoryLogStore } from "./log/memory-store";
 import { BlobLogStore } from "./log/blob-store";
 import type { LogStore } from "./log/types";
+import { BlobRoleStore, InMemoryRoleStore } from "./roles/stores";
+import type { RoleStore } from "./roles/types";
 
 function read<T>(...segments: string[]): T {
   return JSON.parse(readFileSync(path.join(process.cwd(), ...segments), "utf8")) as T;
@@ -30,6 +32,7 @@ type Registry = {
   classes: DrugClasses;
   knownMedicines: KnownMedicineIndex;
   logStore: LogStore;
+  roleStore: RoleStore;
 };
 
 /**
@@ -84,6 +87,12 @@ export function getRegistry(): Registry {
     logStore: process.env.BLOB_READ_WRITE_TOKEN
       ? new BlobLogStore()
       : new InMemoryLogStore(),
+    // Same reasoning, and a sharper consequence: a binding that evaporates
+    // between invocations would re-ask an older adult who he is — the one
+    // question spec §1 promises to ask exactly once.
+    roleStore: process.env.BLOB_READ_WRITE_TOKEN
+      ? new BlobRoleStore()
+      : new InMemoryRoleStore(),
   };
 
   g[GLOBAL_KEY] = built;

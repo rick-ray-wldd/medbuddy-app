@@ -16,9 +16,17 @@ import { verifyLineSignature } from "./signature";
 /** Minimal slice of the LINE webhook payload this adapter cares about. */
 type LineWebhookBody = {
   events?: Array<{
-    type?: string; // "message" | "follow" | …
+    type?: string; // "message" | "follow" | "postback" | …
     timestamp?: number; // ms epoch
     source?: { userId?: string };
+    /** Present on every event; the only id `follow` and `postback` carry, so
+     *  it is what those dedupe on. Verified 2026-07-28 against
+     *  https://developers.line.biz/en/reference/messaging-api/#common-properties */
+    webhookEventId?: string;
+    /** postback only. Free-form string WE authored into a menu or card — but
+     *  it arrives from the client, so upstream re-checks it rather than
+     *  trusting it (see lib/roles/bind.ts). */
+    postback?: { data?: string };
     message?: {
       id?: string;
       type?: string; // "text" | "audio" | "sticker" | …
@@ -91,8 +99,31 @@ export async function handleLineWebhookRequest(
   // `waitUntil` (or a queue). For now the work runs inline; keep handlers fast
   // and revisit before wiring the real upstream.
   for (const event of body.events ?? []) {
+    const eventUserId = event?.source?.userId;
+
+    // `follow` and `postback` carry no message, so they normalise straight
+    // through: this layer decides nothing about them beyond idempotency.
+    // Which role a postback may claim, and whether it may be honoured, is
+    // upstream's call (lib/roles/bind.ts) — postback data is client input.
+    if (event?.type === "follow" || event?.type === "postback") {
+      const eventId = event.webhookEventId;
+      if (!eventId || !eventUserId) continue;
+      if (!dedupe.markIfNew(eventId)) continue;
+
+      await onInbound({
+        channelUserId: eventUserId,
+        receivedAt: new Date(event.timestamp ?? Date.now()).toISOString(),
+        providerMessageId: eventId,
+        body:
+          event.type === "follow"
+            ? { kind: "follow" }
+            : { kind: "postback", data: event.postback?.data ?? "" },
+      });
+      continue;
+    }
+
     // §5: handle exactly `message` events of type text/audio.
-    // Everything else (follow, sticker, image, …): 200 OK, no action.
+    // Everything else (sticker, image, …): 200 OK, no action.
     if (event?.type !== "message") continue;
     const messageType = event.message?.type;
     if (messageType !== "text" && messageType !== "audio") continue;

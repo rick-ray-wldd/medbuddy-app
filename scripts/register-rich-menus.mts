@@ -35,6 +35,12 @@ if (!token) {
   process.exit(1);
 }
 
+const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+if (!baseUrl) {
+  console.error("NEXT_PUBLIC_BASE_URL is not set — the caregiver menu's dashboard cell needs it.");
+  process.exit(1);
+}
+
 const client = new LineSetupClient({ channelAccessToken: token });
 const root = process.cwd();
 

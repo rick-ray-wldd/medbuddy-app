@@ -145,7 +145,11 @@ export class BlobRoleStore implements RoleStore {
     const { list, get } = await import("@vercel/blob");
     const { blobs } = await list({ prefix: PREFIX, limit: 100 });
     for (const blob of blobs) {
-      const res = await get(blob.url, { access: "private" }).catch(() => null);
+      // By pathname, not by `blob.url`. Reading by URL returned nothing for
+      // every binding while the same listing found them — the elder was there
+      // and the lookup said null, which is the failure mode this method was
+      // added to remove.
+      const res = await get(blob.pathname, { access: "private" }).catch(() => null);
       if (!res || res.statusCode !== 200) continue;
       const binding = JSON.parse(await new Response(res.stream).text()) as RoleBinding;
       if (binding.role === role && binding.subjectId === subjectId) return binding;

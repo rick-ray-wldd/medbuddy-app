@@ -2,7 +2,7 @@
 
 本文件描述 MedBuddy 的技術事實、目標設計與尚未解決的風險。產品需求以
 `docs/PRD.md` 為準；程式行為以目前 repository HEAD 為準。本次盤點基準為
-2026-07-29 的 `d41cb1a`。
+2026-07-29 的 `de4784f`。
 
 本專案是 review prototype，不是 production-ready 醫療系統。未完成的認證、
 授權、資料生命週期、交易一致性與供應商治理，不得用「Demo」一詞略過。
@@ -88,6 +88,7 @@ MedBuddy 要讓家庭帶進診間的資訊，比單一處方紀錄更完整，�
 | OCR transcription | **Partial / bounded** | provider timeout、quota、review audit；建立可驗證 provenance | value 只和模型自報 evidence 比對，沒有和影像像素比對 |
 | OCR review → check | **Partial** | 明確逐列確認後一次寫入 snapshot | 主頁能加到 textarea；`rx` 目前變成 `unknown` |
 | OCR intake → snapshot | **Prototype** | 真正 confirmation route 寫入 `intake[]` | HEAD 只有型別、讀取與 seed script；一般 `/api/check` 不寫 intake |
+| Elder 「我的藥」／web preview | **Partial / critical safety regression** | 只投影 validated narration 或另建同等驗證的 elder interface | warm frame 遺失 purpose/coverage/items；現有 focused tests 未涵蓋 preservation/provenance/mapping |
 | Clinician summary | **Current, publicly exposed** | authenticated caregiver view；短效 clinician grant | direct `/summary/[subjectId]` 無認證 |
 | Web signed QR share | **Current, incomplete protection** | 授權 mint、可撤銷、retention/deletion | data-URL QR + HMAC 8h；payload 未加密；direct route bypass |
 | LINE-hosted QR image | **Partial / likely broken** | 修正 private Blob lookup 並做 deployed probe | proxy 用 `get(found.url)`；相同 Blob 問題在 role store 已改用 pathname；route 未測 |
@@ -180,9 +181,12 @@ image
   become `source: "unknown"`.
 - The main workbench has a handoff through the shared textarea, while the standalone `/bag` page is
   still display-only. They must not be described as the same capability.
-- `RegimenSnapshot.intake` and `frameMyMeds(... intake)` exist, but normal OCR confirmation does not
-  persist dose/timing into a snapshot. `scripts/seed-demo-snapshot.mts` creates a synthetic demo
-  snapshot in that target shape and is not evidence of an end-to-end write path.
+- `RegimenSnapshot.intake` and an elder-facing intake reader exist, but normal OCR confirmation does
+  not persist dose/timing into a snapshot. `scripts/seed-demo-snapshot.mts` creates a synthetic demo
+  snapshot in that target shape and is not evidence of an end-to-end write path. The old
+  `frameMyMeds` remains broadly covered by tests, but production 「我的藥」 now uses
+  `frameMyMedsWarm`. Its new tests cover only warning-language selection, not the safety contract
+  described below.
 - Pressing 「開始用藥核對」 is the present coarse review act; there is no per-row confirmation,
   correction audit, or reviewer identity.
 
@@ -208,16 +212,59 @@ The caregiver LINE `send_explanation` action also feeds `subject.cupboard`; only
 elder preview replay the latest stored verdict. These surfaces therefore do not yet share one regimen
 source of truth.
 
-The web elder preview now passes the latest snapshot's `intake` and subject conditions to the same
-`frameMyMeds` interface used by the LINE 「我的藥」 action. This aligns those two read surfaces, but
-does not complete OCR confirmation or change the scheduled runner's fixture-based input.
-
 `vercel.json` runs `0 1 * * *`, which is 09:00 Asia/Taipei once per day. `dueNow` only sends inside
 `[slot, slot + 10 minutes]`; therefore arbitrary slots do not work operationally unless the endpoint
 is invoked manually near each slot. The current route comments explicitly treat manual invocation as
 the demo mechanism.
 
-### 2.5 Flow D — clinician summary and QR
+### 2.5 Flow D — 「我的藥」 and elder preview (critical regression)
+
+```text
+latest snapshot + generic schedule
+  → narrate(latest.verdict, elder) + validateNarration
+  → only use narration.trim() as a non-empty gate
+  → frameMyMedsWarm(reconstructed items, finding.verbatim, slots, conditions)
+  → LINE 「我的藥」 / web preview text
+```
+
+At `de4784f`, these two read surfaces are aligned to each other, but they no longer display the
+validated narration. `frameMyMedsWarm` reconstructs a different message after validation and that
+message crosses no narration validator. The scheduled cron path still uses `frameReminder`; this
+specific regression affects 「我的藥」, repeat, and the web elder preview.
+
+Current consequences:
+
+- `latest.intake ?? resolved verdict items` treats a partial `intake` array as the entire medicine
+  list. The seeded snapshot has two intake rows and three verdict items, so 紅麴 disappears from the
+  spoken medication list.
+- unresolved items, coverage disclosure, indication/purpose, actions, finding limits and escalation
+  wording are dropped. This contradicts the elder-purpose requirement and can turn partial coverage
+  into an apparently complete list.
+- only `finding.verbatim` is passed to the frame; `officialText`, finding identity, count, limits and
+  severity are not. Chinese strings are spoken as-is. If warnings are non-Chinese, any number and any
+  severity collapse to the singular 「有一項想請藥師幫忙看一下」, so multiple findings and a
+  `consult_physician` finding can be misrepresented as one pharmacist question.
+- `nextSlotLine` takes the first meal relation found across all items and applies it to one generic
+  schedule slot, then labels slot position as 「第 N 包」 although the schedule has no medicine-to-slot
+  or packet mapping. At the exact scheduled minute it searches with `>` and skips to the next slot (or
+  says tomorrow). These are invented and potentially wrong instructions.
+- the frame adds 「記得配溫開水喝」, retains the movement aside, asks 「今天還好嗎？」 in the
+  morning, and invites symptom/questions even though ordinary elder text is interpreted as a medicine
+  name. These statements are not grounded in the verdict or handled by an appropriate response flow.
+- `spokenName` truncates strength/form without checking that the shortened name is unique; its regex
+  does not handle the full-width digits its comment implies.
+- the preview returns original narration `segments` beside a different warm `text`, so the displayed
+  provenance legend does not describe the message on screen.
+- focused tests now cover suppressing one English warning, speaking one Chinese warning, and the
+  no-warning case. They do not cover item preservation, unresolved coverage, purpose, count/severity,
+  `officialText` provenance, item-slot mapping, exact-minute behavior, name uniqueness, or preview
+  segment agreement. `nextSlotLine` and `spokenName` remain untested directly.
+
+This path is fail-closed work, not a copy refinement: either display the validated narration, or give
+the warm projection its own deep interface with explicit inputs, association invariants, provenance,
+and tests before sending it.
+
+### 2.6 Flow E — clinician summary and QR
 
 ```text
 latest RegimenSnapshot + SubjectLog
@@ -243,7 +290,7 @@ access after the deadline but does not delete stored QR objects.
 The signed path is not the current privacy gate for the overall system because the direct
 `/summary/[subjectId]` route reads the same full log anonymously.
 
-### 2.6 Flow E — LINE role selection
+### 2.7 Flow F — LINE role selection
 
 ```text
 LINE follow/rebind
@@ -523,9 +570,9 @@ The correct guarantee is cache-address integrity, not semantic audio equivalence
 | --- | --- | --- | --- | --- |
 | INV-01 | Every clinical fact and delivery is bound to one subject | `Verdict.subject`, `DeliveryTarget.subject`, role binding | schedule accepts other fixtures and reuses one elder recipient for all schedules | resolve recipient and confirmed regimen per `subjectId`; reject outside allowed subject |
 | INV-02 | Role changes presentation, never subject | fixed `DEMO_SUBJECT_ID` in LINE binding | anonymous routes address mother/resident fixtures; same-account policy conflicts with pair allowlist | principal carries one authorized subject claim across every surface |
-| INV-03 | A transport adapter does not compose clinical content | `Delivery.send` receives settled text | framing adds ungrounded movement advice; schedule uses fixture cupboard | validate full outbound text, including frame, against an allowed furniture contract |
+| INV-03 | A transport adapter does not compose clinical content | `Delivery.send` receives settled text | upstream warm frame composes water/meal/packet instructions after validation; schedule uses fixture cupboard | validate full outbound text, including frame, against an allowed furniture contract |
 | INV-04 | Unknown medication is explicit; never guessed | `no_match`, `ambiguous`, `matched_without_ingredients` | ambiguity uses raw strings; permissive health-food contains matching | canonical resolution key; measured false-positive rate |
-| INV-05 | Narration cannot add clinical judgment beyond `Verdict` | narrator receives verdict; lexical validator | validator is not semantic; fallback violations are returned but narration is still rendered/sent | fallback violation becomes typed fail-closed result |
+| INV-05 | Narration cannot add clinical judgment beyond `Verdict` | narrator receives verdict; lexical validator | fallback violations still render; warm path discards validated text and constructs unvalidated output | fallback violation and post-projection violation become typed fail-closed results |
 | INV-06 | Caregiver observation remains source-contained | whitespace-normalised containment; batch append | candidate whitespace may differ; partial accepted extraction can drop omitted/rejected sibling text; elder question is misattributed | store source paragraph + derived spans; coverage check; separate `Question` |
 | INV-07 | OCR output has no privilege over typed input | review draft enters textarea | model value/evidence can be jointly fabricated; `rx` maps to `unknown`; no per-row confirm; intake only seeded | human-confirmed command + shared source parser + snapshot transaction |
 | INV-08 | Reminder content comes from confirmed record | same rule/narration pipeline | runner uses `subject.cupboard`, not latest snapshot; slots not medication-specific | confirmed-regimen lookup at scheduler seam |
@@ -534,9 +581,11 @@ The correct guarantee is cache-address integrity, not semantic audio equivalence
 | INV-11 | Shared summary grant is short-lived and scoped | HMAC + expiry | token readable/non-revocable; direct path bypass; object remains after expiry | authorized mint, revocation/audit, retention job, remove bypass |
 | INV-12 | Voice use is opt-in and consented | key + profile; Serin catalogue | env ID may be unknown; consent is unverified text | verified catalogue only; disclose persona; withdrawal/deletion |
 | INV-13 | Duplicate LINE webhook does not duplicate effects | in-process `Set` | serverless instances do not share it; mark-before-handle can lose failed events | durable inbox with processing state |
-| INV-14 | No ungrounded behavior or health advice | clinical narration checks | `MOVEMENT_ASIDE` says 「有空的話起來走一走,不要坐太久」 and only suppresses `recurrent_falls` | remove it, or establish product/clinical rationale and validate full eligibility |
-| INV-15 | Bot does not solicit adherence/self-report | forbidden phrase check | `我的藥` greeting asks 「今天還好嗎？」; not adherence, but it opens an unsupported health conversation | decide if conversational question is desired and handle/avoid implied response expectation |
+| INV-14 | No ungrounded behavior or health advice | clinical narration checks | warm path runs after checks and says 「記得配溫開水喝」 plus movement advice; only movement is suppressed for `recurrent_falls` | remove advice, or establish rationale and validate full eligibility before projection |
+| INV-15 | Bot does not solicit unsupported self-report | narrow forbidden-phrase check | 「今天還好嗎？」 and 「有不舒服…跟我說」 invite health input that elder text handling treats as a medicine name | remove questions or add an explicit, safe response contract |
 | INV-16 | Health access and outbound delivery are authorized and addressed | LINE webhook HMAC/role checks and signed share paths protect only some surfaces | direct pages/routes are anonymous; demo broadcast sends to an audience rather than a resolved person | authenticate every endpoint; remove broadcast or isolate it to synthetic channel |
+| INV-17 | Timing/meal/packet wording requires an explicit item-slot association | intake can carry per-item printed text; schedule carries only times | warm path applies first meal relation to a generic slot and invents 「第 N 包」; exact-minute lookup skips the due slot | model and validate item-to-slot/packet mapping, otherwise state time only |
+| INV-18 | Elder projection preserves coverage, purpose, actions and provenance | validated deterministic narration contains these segments | warm path drops them, may hide items, and preview labels unrelated original segments | project from validated segments without loss; provenance must describe displayed text |
 
 ### 7.2 Critical current violations
 
@@ -563,6 +612,22 @@ can enter this deployment, authentication/authorization is a release blocker, no
 narration, the client ignores `narrationMeta`, and LINE delivery sends it. The truthful current
 behavior is “surface the violation metadata while still using the fallback,” not “failed narration is
 never shown.” Target must return no displayable narration when fallback validation fails.
+
+#### P0 — 「我的藥」 rebuilds unsafe instructions after validation
+
+`lastCheckNarration` and `/api/preview/elder` call `narrate`, but use its text only as a non-empty
+gate. They then call `frameMyMedsWarm`, whose output bypasses narration validation. Its focused
+warning tests do not exercise the end-to-end projection invariants. The function
+can hide an intake-unlisted medication, omit unresolved coverage and medication purpose, detach raw
+warning input from limits/escalation, collapse any number of non-Chinese warnings and even
+`consult_physician` severity into singular 「有一項…問藥師」, apply one item's meal relation to an
+unrelated generic slot, invent 「第 N 包」, skip the exact due minute, truncate names without
+uniqueness checks, and add ungrounded warm-water/movement advice. The preview's provenance segments
+describe the discarded narration rather than the displayed message.
+
+Required correction: revert these surfaces to the validated narration, or stop delivery until a
+tested elder-projection interface preserves full item/coverage/provenance data and accepts an explicit
+medicine-to-slot association. Copy warmth cannot authorize new medication instructions.
 
 #### P0 — cron cadence cannot implement configured times
 
@@ -664,6 +729,10 @@ policy before real patient data is allowed.
 | concurrent log/schedule write | last writer wins | lost observations/schedules | transaction/version check |
 | cron runs after 10-minute grace | slot marked skipped late | most daily slots never sent | minute-level durable scheduling |
 | schedule for wrong subject | may send its cupboard to demo elder | worst-person error | guard at HTTP, store and delivery seams |
+| partial intake exists | warm projection uses intake instead of the full verdict list | medicines absent from intake disappear | merge by stable item identity; disclose unmatched rows |
+| warm next-slot projection | first meal relation + generic slot becomes 「第 N 包」; exact-minute uses `>` | wrong meal/packet/time instruction | require explicit association; otherwise state no inferred instruction |
+| non-Chinese findings | all counts/severities collapse to singular pharmacist sentence | multiple or physician-level escalation is misrepresented | carry structured findings/count/severity through the interface |
+| warm projection drops validated segments | purpose, coverage, actions and provenance disappear | incomplete output appears complete | projection must preserve required segment contract and be revalidated |
 | OCR emits `rx` | parser stores source `unknown` | wrong summary grouping/count | single source parser / use `prescription` |
 | direct summary guessed | full latest log rendered | privacy disclosure | authenticated route or removal |
 | token screenshot leaks | holder can read until expiry | bearer grant; payload readable | minimize payload, audit, revocation if required |
@@ -697,6 +766,7 @@ Live LINE send and medication-bag photo tests are conditional and skip without e
 | OCR-02 review then snapshot | `BagCapture` + `/api/check` tests | `rx` regression test; intake persistence; per-row confirmation |
 | CLIN-01 deterministic grounding/rules | grounding, rule, verdict tests | false-positive benchmark at dataset scale |
 | NAR-01 narration constrained by verdict | narration tests | fallback fail-closed route/LINE tests; semantic limits |
+| ELDER-01 warm 「我的藥」 projection | focused tests for English/Chinese/no-warning branches | item/coverage/purpose preservation, count/severity, official provenance, association, exact-minute, name uniqueness, segment agreement |
 | LOG-01 longitudinal snapshot diff | log/diff tests | `BlobLogStore` contract and concurrent-write tests |
 | SUM-01 clinician one-page projection | summary pure-module use | direct-route auth, observation attribution, browser E2E |
 | SHARE-01 short-lived grant | token and QR pathname pure tests | LINE proxy route/pathname fix, deployed image fetch, bypass removal, revocation/retention, auth-to-mint |
@@ -715,6 +785,8 @@ Live LINE send and medication-bag photo tests are conditional and skip without e
 - no deployed test proving a configured slot fires at its intended Taipei time;
 - no two-subject scheduler test proving recipient isolation;
 - no test asserting an invalid deterministic fallback produces no visible/sent text;
+- no warm-projection contract test covering full item preservation, required narration segments,
+  structured escalation, schedule association, exact-minute behavior, or preview provenance;
 - no security test enumerating anonymous read/write/egress/spend endpoints;
 - no lint step in the main verification command;
 - no provider timeout, retention, deletion or consent-withdrawal tests.
@@ -730,10 +802,12 @@ layering more tests over each current shallow caller.
 1. **Close wrong-person and anonymous access paths.** Guard every endpoint, remove or authenticate
    direct summaries, restrict schedule records to the authorized subject, remove broadcast outside an
    isolated synthetic channel.
-2. **Repair the LINE QR handoff.** Read the private Blob by pathname, add a route test, then prove the
+2. **Make every elder projection fail closed.** Restore 「我的藥」/preview to validated narration or
+   stop delivery until a tested projection preserves items, purpose, coverage, provenance and
+   structured escalation without inventing meal/packet advice. Invalid fallback narration must not
+   be returned, rendered, synthesized or sent.
+3. **Repair the LINE QR handoff.** Read the private Blob by pathname, add a route test, then prove the
    stored image URL is fetchable in the deployed environment before relying on it in a visit.
-3. **Make narration fail closed.** Invalid deterministic fallback must not be returned, rendered,
-   synthesized or sent. Validate any post-narration frame separately.
 4. **Resolve the LINE identity decision.** Implement same-account role reselect only after deciding
    what caregiver-only information that account may see; keep subject immutable.
 5. **Deepen clinical check composition.** One interface owns source parsing, grounding, verdict,
@@ -795,6 +869,10 @@ is needed and which risk it is allowed to introduce.
     audio and logs live, and who may delete/export them?
 15. **Safety policy:** On invalid deterministic narration, should the UI show a non-clinical error and
     stop, or is there an approved minimal message? Current behavior silently chooses unsafe continuity.
+16. **Elder explanation contract:** Must 「我的藥」 explain each medicine's purpose, or is a name-only
+    list intentional? If a generic clock slot has no medication/packet association, what product
+    evidence permits saying meal timing or 「第 N 包」? Default is to omit those instructions and the
+    warm-water advice until explicit source data and a testable rationale exist.
 
 ---
 
@@ -823,3 +901,153 @@ structured family context, and a clinician-facing summary for a synthetic review
 not provide diagnosis, prescribing, adherence verification, complete medication coverage, secure
 multi-user account management, or production-grade medical-data governance. A zero-finding result is
 only “no encoded finding among resolved items,” never “safe.”
+
+---
+
+## 13. Where everything lives
+
+Paths are relative to the repository root. Every feature below can be read
+end to end by following its row.
+
+### 13.1 The medical core — nothing in here knows about LINE, HTTP, or a screen
+
+| Concern | Path | What it guarantees |
+| --- | --- | --- |
+| Name normalisation | `src/lib/grounding/normalize.ts` | 5mg and 50mg stay distinct |
+| Resolution | `src/lib/grounding/resolve.ts` | Three unresolved kinds; reverse substring matching confined to health foods |
+| Rule evaluation | `src/lib/rules/engine.ts` | `assertRuleSetIsSafe` throws on any severity outside consult-a-human |
+| Rule shapes | `src/lib/rules/types.ts` | `Finding.verbatim` is the source's own wording |
+| The verdict | `src/lib/verdict/build.ts`, `.../types.ts` | `outcomeOf` separates "checked, nothing found" from "nothing checkable" |
+| Narration | `src/lib/narration/narrate.ts` | Receives a verdict; holds no register access |
+| Narration validation | `src/lib/narration/validate.ts` | Structural and lexical — **not** semantic; see §4 |
+| Committed rule sets | `config/rules/stopp-v3.json`, `.../tfda-health-food-warnings.json`, `.../drug-classes.json` | Diffable; every safety change is a reviewable commit |
+| Registers | `data/tfda-drugs.json` (23,211), `data/tfda-health-foods.json` (464) | Licence and retrieval date carried in the file |
+
+### 13.2 Inputs
+
+| Input | Path | Guarantee |
+| --- | --- | --- |
+| Typed list | `src/app/api/check/route.ts`, `src/app/check-client.tsx` | — |
+| Caregiver paragraph | `src/lib/observations/parse.ts` | Every note verbatim in what they typed, or discarded |
+| ↳ model boundary | `src/lib/observations/gemini.ts` | Injectable; tests run offline |
+| Bag photograph | `src/lib/ocr/claude.ts` | Claude Sonnet transcribes; forced through a tool schema |
+| ↳ the check | `src/lib/ocr/validate.ts` | A value must appear in the evidence it cites |
+| ↳ field shapes | `src/lib/ocr/types.ts` | Status per field; **no confidence score** |
+| ↳ intake API | `src/app/api/ocr/bag/route.ts` | Returns a draft, never writes a record |
+| ↳ camera / upload UI | `src/app/bag-capture.tsx`, `src/app/bag/` | Appends to the same textarea as typing |
+| Speech in | `src/app/speech.tsx` | Browser dictation, zh-TW |
+
+### 13.3 Storage
+
+| Record | Path | Note |
+| --- | --- | --- |
+| Interfaces | `src/lib/log/types.ts`, `src/lib/roles/types.ts`, `src/lib/schedule/store.ts` | The seams that make Postgres one file each |
+| Log | `src/lib/log/blob-store.ts`, `.../memory-store.ts` | `appendObservations` batches — see §12.5 |
+| Diffing | `src/lib/log/diff.ts` | Computed from two snapshots, never stored |
+| Role bindings | `src/lib/roles/stores.ts` | In-process overlay narrows a stale-read window it does not close |
+| Binding rule | `src/lib/roles/bind.ts` | Elder-terminal, flagged |
+| Schedules | `src/lib/schedule/store.ts`, `.../types.ts`, `.../due.ts` | ≤4 slots, ≥60 min apart, quiet hours |
+| Wiring | `src/lib/registry.ts` | Held on `globalThis`; Blob when configured, memory otherwise |
+
+### 13.4 LINE
+
+| Concern | Path |
+| --- | --- |
+| Signature over raw bytes | `src/lib/delivery/line/signature.ts` |
+| Webhook core (framework-free) | `src/lib/delivery/line/webhook.ts` |
+| Route shell | `src/app/api/line/webhook/route.ts` |
+| Idempotency | `src/lib/delivery/line/dedupe.ts` |
+| **Routing and authorisation** | `src/lib/delivery/inbound.ts` — `ROLE_ACTIONS` |
+| Menu action handlers | `src/lib/delivery/menu-actions.ts` |
+| Outbound content seam | `src/lib/delivery/line/LineDelivery.ts` |
+| Link refusal | `src/lib/delivery/types.ts` — `containsLink` |
+| Interface plumbing (not content) | `src/lib/delivery/line/setup-client.ts` |
+| Menu definitions | `src/lib/delivery/line/rich-menu.ts` — `assertNoLinksForElder` |
+| Menu images | `scripts/render-rich-menu.mts` → `public/rich-menu-*.png` |
+| Registration | `scripts/register-rich-menus.mts` |
+| Role card | `src/lib/delivery/line/role-card.ts` |
+| Fixed demo pair | `src/lib/delivery/line/demo-pair.ts` |
+| Demo broadcast | `src/lib/delivery/line/broadcast.ts` |
+| Reminder cards | `src/lib/delivery/line/reminders-card.ts`, `.../reminder-settings.ts` |
+
+### 13.5 Voice
+
+| Concern | Path |
+| --- | --- |
+| Provider | `src/lib/voice/fish.ts` |
+| Consent records | `src/lib/voice/profiles.ts` |
+| **Find-or-synthesise, keyed by text** | `src/lib/delivery/prerendered-speech.ts` — `speechFor` |
+| **What is spoken** | `src/lib/delivery/reminder-framing.ts` |
+| ↳ reminder framing | `frameReminder`, `assertNoSelfReport` |
+| ↳ 我的藥 | `frameMyMedsWarm`, `spokenName`, `movementAsideFor` |
+| Hosting (private blob) | `src/lib/delivery/line/blob-audio-store.ts` |
+| Signed URLs | `src/lib/delivery/line/audio-url.ts` |
+| Serving route | `src/app/api/line/audio/[key]/route.ts` |
+| Offline pre-render | `scripts/prerender-elder-speech.mts` |
+
+### 13.6 Clinician handoff
+
+| Concern | Path |
+| --- | --- |
+| Summary assembly | `src/lib/summary/clinician.ts` |
+| The sheet (shared by both routes) | `src/app/summary/[subjectId]/sheet.tsx` |
+| Observation table, ordered by prescribing relevance | same file — `ObservationTable` |
+| Signed share token | `src/lib/summary/share-token.ts` |
+| QR blob path | `src/lib/summary/qr-path.ts` |
+| Mint + deliver | `src/lib/summary/deliver-qr-to-line.ts` |
+| QR image route (checks the token) | `src/app/api/summary/qr/[token]/route.ts` |
+| What the doctor sees | `src/app/summary/s/[token]/page.tsx` |
+
+### 13.7 Scheduling
+
+| Concern | Path |
+| --- | --- |
+| Slot model and limits | `src/lib/schedule/types.ts` |
+| What is due | `src/lib/schedule/due.ts` |
+| One tick | `src/lib/schedule/run.ts` |
+| Cron target | `src/app/api/cron/deliver-scheduled/route.ts`, `vercel.json` |
+| Caregiver UI | `src/app/schedule-card.tsx`, `src/app/api/schedule/route.ts` |
+| Content path | `src/lib/delivery/deliver-explanation.ts` |
+
+### 13.8 Dashboard
+
+| Concern | Path |
+| --- | --- |
+| Workspace | `src/app/page.tsx`, `src/app/check-client.tsx` |
+| **The elder's phone, rendered** | `src/app/elder-preview.tsx`, `src/app/api/preview/elder/route.ts` |
+| Pair status | `src/lib/hub/status.ts` |
+
+### 13.9 Operational scripts
+
+Read-only unless marked. All take `--apply` or credentials explicitly.
+
+| Script | Purpose |
+| --- | --- |
+| `scripts/list-roles.mts` | Who is bound as what |
+| `scripts/unbind-role.mts` | **Destructive.** Removes a binding *and* unlinks the menu — both halves |
+| `scripts/send-role-card.mts` | Push the card on demand (demo) |
+| `scripts/list-rich-menus.mts` | What exists on the channel |
+| `scripts/list-speech.mts` | Which clips are cached |
+| `scripts/list-log.mts` | One person's record |
+| `scripts/seed-demo-observations.mts` | **Destructive.** States a known demo state rather than deriving it |
+| `scripts/seed-demo-snapshot.mts` | **Destructive.** A snapshot in the shape OCR will produce |
+| `scripts/ingest-tfda.mts` | Rebuild the registers from data.gov.tw |
+| `scripts/probe-role-store.mts`, `scripts/probe-terminal-rule.mts` | Reproduce the Blob consistency failures |
+
+### 13.10 Tests
+
+31 test files, 325 passing, 5 skipped. The skipped ones are live-network
+probes and self-skip without credentials.
+
+| The claim you want checked | File |
+| --- | --- |
+| Narration cannot introduce a drug | `src/lib/narration/narrate.test.ts` |
+| Validator catches an unsupported claim | `src/lib/narration/narrate.test.ts` — the validator has no separate test file; its cases live with the narrator it guards |
+| A caregiver's words survive intact | `src/lib/observations/parse.test.ts` |
+| OCR cannot infer from an indication | `src/lib/ocr/validate.test.ts` |
+| Elder-terminal, and the flag | `src/lib/roles/bind.test.ts` |
+| A menu is not an authorisation boundary | `src/lib/delivery/__tests__/inbound-roles.test.ts` |
+| No link ever reaches the elder | `src/lib/delivery/line/rich-menu.test.ts` |
+| A reminder never asks or grades him | `src/lib/delivery/reminder-framing.test.ts` |
+| Four observations are stored as four | `src/lib/log/append-batch.test.ts` |
+| The QR is addressed from a binding | `src/lib/summary/deliver-qr-to-line.test.ts` |

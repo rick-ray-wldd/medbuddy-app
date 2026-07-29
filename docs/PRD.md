@@ -5,8 +5,8 @@ attributed longitudinal record and a clinician-scannable follow-up sheet.
 
 Ping-Juei (Ray) Tsai · AI Fund Engineer in Residence Build Challenge
 
-Live: https://medbuddy-app.vercel.app · Source: this repository · Reviewed:
-2026-07-29
+Live: https://medbuddy-app.vercel.app · Source: this repository · Reviewed
+against `de4784f` on 2026-07-29
 
 ---
 
@@ -205,9 +205,12 @@ fact.
 1. The caregiver taps 「記一件事」 and types one natural paragraph.
 2. The system optionally asks Gemini to segment the paragraph into
    `symptom`, `self_medication`, `alcohol`, `missed_dose`, or `other`.
-3. Every accepted note must be an exact substring of the caregiver's input. If
-   extraction is unavailable or untrustworthy, the complete paragraph is
-   stored as `other`; the system does not rewrite it.
+3. Every accepted note must be contained in the caregiver's input after
+   whitespace normalization. If extraction is unavailable or no candidate is
+   accepted, the complete paragraph is stored as `other`; the system does not
+   rewrite it. When only some candidates are accepted, however, rejected or
+   omitted sibling text is not retained separately. This is a known fidelity
+   gap rather than an exact-verbatim guarantee.
 4. All observations from one message are appended in one store operation so a
    stale read cannot discard sibling observations.
 5. The longitudinal log retains recorded time, category, verbatim note, and
@@ -218,8 +221,9 @@ fact.
 7. The family creates a signed, short-lived QR/link for the clinician.
 
 **Current status: Partial.** Natural-language capture, safe segmentation,
-append-only persistence, summary projection, and signed sharing exist. Event
-time, editing/deletion, date filtering, older-adult review/consent, clinician
+append-only persistence, summary projection, and signed sharing exist. Source
+paragraph retention for partially accepted extraction, event time,
+editing/deletion, date filtering, older-adult review/consent, clinician
 validation, page-length control, and correct separation of elder questions are
 missing.
 
@@ -235,7 +239,11 @@ missing.
 5. The resolver and rule engine produce a snapshot; 「我的藥」 reads the most
    recent check snapshot.
 
-**Current status: Partial.** Camera/upload and evidence-only OCR are built. The
+**Current status: Partial.** Camera/upload and a model-response-bounded OCR draft
+are built. The validator checks that a returned value appears in evidence that
+the same model returned; it does not independently prove pixel correspondence
+or validate every provenance field. Human comparison with the original image
+therefore remains mandatory. The
 standalone `/bag` flow opened from LINE remains draft-only and requires manual
 re-entry. The embedded handoff emits the source token `rx`, while the medication
 parser accepts `prescription`; it therefore degrades to `unknown`. The snapshot
@@ -248,27 +256,43 @@ end-to-end tests land.
 
 1. The caregiver configures up to four enabled clock-time slots, at least 60
    minutes apart.
-2. At a due slot, the delivery path produces grounded elder-facing text and may
-   synthesize the same message with the consented Serin demo profile.
+2. At a due slot, the delivery path produces elder-facing text through the
+   medication pipeline and may synthesize the same message with the
+   repository-configured Serin demo profile.
 3. LINE receives text even when audio generation or hosting fails.
 4. The caregiver may also trigger an immediate explanation from LINE.
 
 **Current status: Partial.** Schedule editing, bounds, due/late/idempotency
-logic, text delivery, optional Fish Audio delivery, and the consented Serin
-profile exist. The deployed Vercel Hobby cron runs once daily, so it cannot
+logic, text delivery, optional Fish Audio delivery, and a Serin profile carrying
+a repository consent attestation exist. That attestation is not independent
+identity or consent verification. The deployed Vercel Hobby cron runs once
+daily, so it cannot
 deliver arbitrary configured times on time; the demo manually drives the
 endpoint. Scheduled and immediate LINE delivery currently use seeded cupboard
 data rather than the latest snapshot. Slots are generic and cannot truthfully
 answer which medicine, dose, or before/after-meal instruction belongs to a
 time.
 
-Serin must always be disclosed as **AI-generated, granddaughter-style audio**.
-It is not the recipient's family member. Current framing asks 「今天還好嗎？」,
-which solicits an unmodeled self-report, and adds the ungrounded behavior
-suggestion 「有空的話起來走一走，不要坐太久」 except for a hard-coded fall-risk
-condition. The latter violates the requirement that the system must not invent
-health or behavior advice. Both are known boundary gaps to remove or explicitly
-redesign and validate before this framing is accepted.
+Serin must always be disclosed to the recipient as **AI-generated,
+granddaughter-style audio**. It is not the recipient's family member; current
+source comments and partial web copy are not a complete user-facing disclosure.
+
+The production 「我的藥」 warm projection added at `137f63b` is a separate P0
+safety gap. It can omit unresolved items, medication purpose, coverage, finding
+limits, and escalation; seeded `intake` rows replace rather than enrich all
+verdict items. It also derives 「第 N 包」 from generic clock slots, applies the
+first available meal relation to the next slot, shortens product names without
+checking uniqueness, and adds 「配溫開水」 and walking advice outside the verdict.
+The page's provenance segments describe the discarded narration rather than the
+displayed warm text. The focused tests added at `de4784f` cover whether an
+English warning is replaced and a Chinese warning is retained, but not item
+preservation, provenance, timing association, name uniqueness, coverage, or
+escalation. The non-Chinese fallback also collapses any number and severity of
+findings into 「有一項…請藥師」, so physician escalation can be downgraded and
+multiple findings miscounted. Warmth is a product requirement; invented
+medication mapping or health advice is not. This projection must not be treated
+as an accepted safety path until it preserves the full relevant verdict and
+passes the same outbound validation.
 
 ### 5.4 Role re-selection
 
@@ -291,20 +315,20 @@ recovery, not a production consent or authorization model.
 
 | ID | Requirement and reason | Status | Acceptance and current evidence/gap |
 | --- | --- | --- | --- |
-| FR-01 | A caregiver can submit one ordinary-language observation from LINE or web, because capture must fit the moment it occurs. | **Built** | Blank input is rejected; valid input produces one or more categorized observations; every stored note is verbatim input. `observations/parse.ts` and its tests enforce substring preservation and fallback. |
+| FR-01 | A caregiver can submit one ordinary-language observation from LINE or web, because capture must fit the moment it occurs. | **Partial, bounded** | Blank input is rejected and accepted spans must be whitespace-normalized substrings. If some spans are accepted, rejected or omitted sibling content may be lost because the source paragraph is not retained; classification and coverage are not verified. |
 | FR-02 | Observations form an attributed longitudinal record rather than a disposable chat transcript. | **Partial** | Batch append and chronological storage exist. Acceptance additionally requires occurrence date, correction, deletion, period filtering, retention policy, and subject review/consent. |
 | FR-03 | The follow-up sheet exposes latest medication context, change, uncertainty, and caregiver observations for rapid scan. | **Partial** | Current page renders these sections. It must stop calling caregiver-declared sources “not in the prescription record,” exclude `elder-asked` sentinels, remain usable with long histories, and pass clinician scan tests. |
-| FR-04 | A family can share the sheet without requiring clinician installation. | **Built** | A signed, expiring token produces the shared view and QR. Its payload is base64-decodable and contains `subjectId`; signing provides integrity and expiry, not encryption or confidentiality. The caregiver route is unauthenticated; see NFR-03. |
-| FR-05 | OCR transcribes medication-bag evidence without identifying a drug from appearance or filling missing fields. | **Built** | Every field has value/status/evidence; missing or conflicting text is visible; the API writes no log entry. Provider availability is required. |
+| FR-04 | A family can share the sheet without requiring clinician installation. | **Built for web; LINE image Partial** | A signed, expiring token produces the shared view and browser data-URL QR. Its payload is base64-decodable and contains `subjectId`; signing provides integrity and expiry, not encryption or confidentiality. The LINE-hosted QR proxy uses an unverified Blob URL lookup and may return 404; the caregiver route is unauthenticated. |
+| FR-05 | OCR transcribes medication-bag evidence without identifying a drug from appearance or filling missing fields. | **Partial, bounded** | Fields carry value/status/evidence and the API writes no log entry, but validation proves only self-consistency inside the model response, not correspondence to image pixels; provenance fields and the live route lack complete tests. |
 | FR-06 | OCR content reaches 「我的藥」 only after caregiver review and the ordinary medication-check path. | **Partial** | Embedded draft → editable list → check exists, but `rx` currently becomes `unknown`; standalone `/bag` does not hand off. Seeded snapshots demonstrate intake rendering, but the normal OCR confirmation path does not persist intake details. |
 | FR-07 | Medication names are grounded and uncertainty is retained before rules or narration. | **Built, bounded** | Resolution uses the loaded TFDA datasets; ambiguous/no-match items remain unresolved. This is name matching, not identity verification. |
 | FR-08 | Findings quote their source and direct the user to a pharmacist or physician without prescribing. | **Built, bounded** | The prototype implements 8 of 133 STOPP-derived rules and 3 TFDA health-food warning rules. Conditions are seeded; coverage is not comprehensive. |
-| FR-09 | 「我的藥」 uses the most recent medication-check snapshot and role-specific narration. | **Built** | No snapshot produces an explicit empty state; latest snapshot is re-narrated. It must be called “latest check,” not “verified/current,” until staleness and confirmation are modeled. |
+| FR-09 | 「我的藥」 uses the most recent medication-check snapshot and a safe role-specific projection. | **Partial / P0** | The latest snapshot is read, but the new elder warm projection can drop unresolved items and safety context, substitute seeded intake for verdict items, infer packet/meal mapping, add ungrounded advice, and lose finding count/severity/escalation. Focused warning tests exist but do not cover those invariants. It must be called “latest check,” not “verified/current.” |
 | FR-10 | A caregiver can add/remove bounded reminder times in LINE and web. | **Built** | Maximum four slots, valid `HH:mm`, at least 60 minutes apart, explicit empty schedule, and no invented default time. |
-| FR-11 | A configured reminder reaches the elder once, near its configured time, as text plus optional disclosed Serin audio. | **Partial** | Due/idempotency and delivery are tested; production-frequency triggering, latest-snapshot input, end-to-end delivery monitoring, and removal of unmodeled self-report prompts and ungrounded advice remain open. |
+| FR-11 | A configured reminder reaches the elder once, near its configured time, as text plus optional Serin audio. | **Partial** | Due/idempotency and delivery are tested; production-frequency triggering, latest-snapshot input, end-to-end delivery monitoring, user-facing AI/non-family disclosure, and removal of unmodeled self-report prompts and ungrounded advice remain open. |
 | FR-12 | The same LINE account can deliberately reselect elder/caregiver role without changing subject. | **Partial, feature-flagged** | 「切換身分」 re-opens selection and subject ID remains fixed. Explicit per-role recipient IDs prevent cross-role claims; open mode allows them but does not enforce one-per-role or auto-swap. Production authorization is not included. |
 | FR-13 | A user can switch among multiple care subjects. | **Not built** | No subject roster, picker, relationship authorization, or per-subject consent exists. This is distinct from role switching. |
-| FR-14 | The product uses a real relative's familiar voice through consented cloning/calibration. | **Not built** | Current audio is Serin, a consented demo voice. Future acceptance requires speaker and recipient consent, disclosure, revocation, deletion, abuse controls, and intelligibility evaluation. |
+| FR-14 | The product uses a real relative's familiar voice through consented cloning/calibration. | **Not built** | Current audio uses a Serin demo profile with a repository consent attestation, not a family voice or independently verified consent workflow. Future acceptance requires speaker and recipient consent, disclosure, revocation, deletion, abuse controls, and intelligibility evaluation. |
 | FR-15 | Taiwanese and other low-resource languages are first-class input/output options. | **Not built** | Acceptance requires dialect-specific transcription and synthesis evaluation with native speakers, a text fallback, and explicit handling of uncertainty. |
 | FR-16 | A long-term companion memory carries consented context across care episodes. | **Not built** | Future memory must be inspectable, attributable, correctable, exportable, and deletable. It must not infer cognitive status or claim to prevent memory decline. |
 
@@ -314,8 +338,8 @@ recovery, not a production consent or authorization model.
 
 | ID | Requirement | Status | Acceptance and current gap |
 | --- | --- | --- | --- |
-| NFR-01 | **Clinical safety:** product-authored text must not diagnose, prescribe, change dose, recommend stopping a medicine, solicit an unmodeled health self-report, or add health/behavior advice. | **Partial** | Medication verdicts and deterministic fallback are bounded, but semantic entailment is not proven; current granddaughter-style framing asks a well-being question and adds ungrounded movement advice. Verified source quotations may contain dosing text; the system must not author new dosing instructions. |
-| NFR-02 | **Provenance:** every medication projection identifies dataset/rule versions and distinguishes quote, caregiver report, OCR evidence, and product copy. | **Partial** | Verdict provenance and source quotations exist. OCR `rx` degradation and summary source wording violate the full requirement. |
+| NFR-01 | **Clinical safety:** product-authored text must not diagnose, prescribe, change dose, recommend stopping a medicine, solicit an unmodeled health self-report, or add health/behavior advice. | **Partial / P0** | Medication verdicts are bounded, but fallback validation is fail-open and the current warm projection invents packet/meal mapping, warm-water and movement advice after validation. Verified source quotations may contain dosing text; the system must not author new dosing instructions. |
+| NFR-02 | **Provenance:** every medication projection identifies dataset/rule versions and distinguishes quote, caregiver report, OCR evidence, and product copy. | **Partial** | Verdict provenance exists, but OCR `rx` degradation, summary source wording, warm finding simplification, and preview segments that describe discarded rather than displayed text violate the requirement. |
 | NFR-03 | **Access control:** only authorized participants can read/write a subject's health data. | **Partial / not suitable for real data** | Signed clinician links expire and resist tampering, but their payload is not confidential. Direct `/summary/[subjectId]` and health-data write/share routes have no user authentication; role binding is not authorization. |
 | NFR-04 | **Privacy and consent:** collection, third-party processing, retention, sharing, correction, and deletion are explained and controlled. | **Not built** | OCR images are processed by Anthropic even when the app does not persist them; caregiver prose may be processed by Gemini; narration may be sent to Fish Audio. There is no end-user consent, retention, deletion, or data-subject review flow. |
 | NFR-05 | **Reliability:** one user action produces one durable write; scheduled delivery is at-most-once and observable. | **Partial** | Batch observation append, one-snapshot-per-check behavior, and slot idempotency have tests. Provider failures, deployment timing, eventual consistency, retry policy, and operator recovery are not end-to-end validated. |
@@ -451,7 +475,11 @@ Evaluation sequence:
    seed-only intake path is evidence of rendering, not of capture.
 4. Make latest confirmed/check snapshot the single regimen source for
    「我的藥」, immediate send, reminders, and the follow-up sheet.
-5. Remove ungrounded movement/health advice from warm framing.
+5. Replace the current warm projection with a verdict-preserving interface:
+   retain unresolved items, coverage, limits, escalation and all recorded
+   medicines; remove invented packet/meal mapping, name truncation without an
+   identity check, warm-water guidance, and movement/health advice; validate
+   and test the exact outbound text.
 6. Add authentication to direct summary and write/share routes; define consent,
    retention, correction, deletion, and subject visibility.
 7. Replace the once-daily demo trigger with a scheduler that can meet the stated

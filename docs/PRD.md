@@ -1,412 +1,512 @@
-# MedBuddy — Product Requirements
+# MedBuddy — Product Requirements Document
 
-**Medication comprehension and care-team handoffs for older adults on several medications.**
+**Primary wedge:** turn a caregiver's ordinary-language observations into an
+attributed longitudinal record and a clinician-scannable follow-up sheet.
 
-Ping-Juei (Ray) Tsai · AI Fund Engineer in Residence Build Challenge · 48 hours
+Ping-Juei (Ray) Tsai · AI Fund Engineer in Residence Build Challenge
 
-Live: https://medbuddy-app.vercel.app · Source: this repository · Tests: `npm test`
-
----
-
-## 0. Current demo contract (July 29, 2026)
-
-The review demo deliberately narrows the relationship model to one care pair:
-
-| Demo participant | Device | Role selection | Record used |
-| --- | --- | --- | --- |
-| Older adult | LINE phone A | taps **我是長輩** once | `subj-father` |
-| Caregiver | LINE phone B | taps **我是照顧者** once | the same `subj-father` |
-| Clinician | no account | scans or opens the reviewable summary | the same `subj-father` |
-
-The selected role is persisted as a `RoleBinding`, and LINE links the matching
-per-user rich menu. The web dashboard is the caregiver workspace and exposes no
-subject switcher. The two deployment recipients are configured as
-`LINE_DEMO_ELDER_USER_ID` and `LINE_DEMO_CAREGIVER_USER_ID`; when both are set,
-a third LINE account cannot claim either role.
-
-The web hub status is a read-only projection of that same pair and shared log;
-it exposes link states and activity counts, never the opaque LINE User IDs, and
-is not a separate clinical database. One `/api/check` request appends exactly
-one snapshot and returns both caregiver and elder narrations, so changing the
-preview tab does not write another history entry.
-
-This is a scope decision, not a claim that caregiving is one-to-one. Multi-elder,
-multi-caregiver, facility rosters, self-service pairing, and role administration
-remain the target model after the challenge. They are intentionally excluded
-from the prototype so the evaluator can follow one medication record across two
-phones, the web dashboard, and the clinician handoff without hidden switching.
+Live: https://medbuddy-app.vercel.app · Source: this repository · Reviewed:
+2026-07-29
 
 ---
 
-## 1. Where this comes from
+## Document purpose and status language
 
-My father has impaired liver function. I go with him to his follow-up
-appointments — about three hours of waiting for a few minutes in the room, and
-I am in the room.
+This document separates the intended product from the current prototype. A
+feature appearing in a design is not evidence that it works, and a working demo
+is not evidence that it improves health outcomes.
 
-When the doctor asks how he has been, he says *"還好，都差不多"* — fine, about
-the same.
-
-I am the one who says he sometimes misses a dose. That when his back or
-shoulder keeps him up at night he takes a painkiller from the cupboard at home,
-usually an anti-inflammatory, from a stock nobody is counting — a stock that
-also holds whatever was left from previous prescriptions, kept in case it is
-useful next time. That he has been drinking more lately.
-
-He does not get angry when I say these things. He goes quiet, looks a little
-embarrassed, and does not quite confirm them.
-
-**None of those three things is in any record the doctor can see.** Not in the
-prescription history, not in the pharmacy system, not in the chart. They enter
-the room only because someone who lives with him is standing there.
-
-He cannot bring that person to every appointment. And that person should not
-have to recite his father's shortfalls in front of him.
-
-> I have not tracked what the doctor did with that information, so this document
-> does not claim an outcome. The claim is the gap itself, and the gap does not
-> need an outcome to be real: if I do not say it, nobody says it.
-
-### What the product is, in one line
-
-**Make every appointment as good as an accompanied one.**
-
----
-
-## 2. Why comprehension and handoffs, and not reminders
-
-### Reminders solve the smallest part of the problem
-
-In my own family, reminders are not the bottleneck. My father usually takes his
-prescriptions on time. I am the reminder mechanism, and I am unreliable — I do
-it when I remember — and it still mostly works.
-
-What does not work is that nobody knows what is in the cupboard, nobody records
-the self-medication, and none of it reaches the doctor.
-
-Non-adherence has many causes and forgetting is only one: not understanding why
-a medicine is being taken, stopping it after a side effect and telling nobody,
-believing that too many medicines damage the liver or kidneys and quietly
-halving them, two departments prescribing overlapping things. A reminder
-addresses the first cause and is blind to the rest.
-
-### Coordination is the larger half, and the word the brief uses is *handoff*
-
-A Taiwanese older adult with several conditions is typically seen by
-cardiology, endocrinology, orthopaedics, perhaps a traditional Chinese medicine
-practitioner, plus a community pharmacy, plus whatever a neighbour recommended.
-
-**The complete list does not exist anywhere.** Not in one department's records,
-not in the pharmacy's, and certainly not for the supplements. Building the first
-place it exists is the wedge.
-
-An accompanied appointment is a handoff. So is a shift change in a care
-facility. The product is the same engine in both.
-
-### The blind spot has a shape, and it is legally defined
-
-Prescriptions are visible. Everything else is not:
-
-| What a person takes | Who can see it |
+| Status | Meaning |
 | --- | --- |
-| Prescriptions | The prescriber, and the national record |
-| Bought over the counter | Nobody |
-| Left over from an earlier course | Nobody |
-| Licensed health foods (健康食品) | Nobody, but they are at least registered |
-| Ordinary supplements | Nobody, and no register exists |
+| **Built** | The end-to-end path exists under its stated configuration and has repository test evidence for its safety-critical boundary. |
+| **Partial** | A meaningful path exists, but a named requirement, integration, validation, or deployment condition is missing. |
+| **Not built** | Product direction only; the current interface must not imply that it is available. |
 
-In Taiwan, **健康食品 is a legal category**, not a synonym for supplement. A
-product carries the label only after review. 464 are registered. The fish oil
-someone buys at a warehouse store is ordinary food and appears in no register at
-all.
-
-That is why the blind spot persists, and it is why the product must be able to
-say *"I could not identify this"* rather than presenting a tidy list.
+Status is about capability, not demo account topology. Environment variables,
+test recipients, and seeded records belong in the demo runbook rather than in
+the product definition.
 
 ---
 
-## 3. The three workflows
+## 1. Problem, evidence, and hypotheses
 
-One record, three role-scoped projections. The **current demo** is exactly one
-older adult and one caregiver attached to `subj-father`; both LINE phones and
-the web dashboard read and write that record. The broader many-to-many model —
-two siblings splitting appointments, a facility carer responsible for twelve
-residents, or one person caring for both parents — remains documented in
-`docs/DATA-MODEL.md` as the post-demo target. Every finding still carries its
-subject, and nothing renders without the name.
+### 1.1 The care-information gap
 
-### 3.1 The caregiver — the first user, and the one who pays
+The source case is the founder's experience accompanying his father to
+follow-up appointments. At home, a caregiver may notice details such as missed
+doses, pain that led to taking an old or over-the-counter medicine, changes in
+alcohol use, or symptoms that do not come up during the appointment. When asked
+in the room, the older adult may give a short answer such as 「還好，都差不多」.
+If the caregiver cannot attend, those observations may not reach the clinician.
 
-The adult child is the buyer because they are the one who is already doing this
-work, badly, in their head.
+Medication context is fragmented as well. A prescription list does not by
+itself describe everything physically used at home: over-the-counter products,
+supplements, and leftovers may be known only to the family. MedBuddy therefore
+captures the **source as declared by the caregiver**; it does not claim to have
+verified whether an item appears in a national prescription record.
 
-| What they do today | In MedBuddy |
-| --- | --- |
-| Keep the list in their head | Type or dictate what is on the living-room table |
-| Notice things and forget them | Record an observation when it happens |
-| Realise at the appointment they cannot remember | Bring one page |
-| Say the difficult parts out loud in front of their parent | Hand over a sheet |
+The product problem is narrower than “older adults forget medicine”:
 
-**Built:** a fixed-subject medical dashboard, free-text intake with a source per line
-(prescription / over the counter / leftover / supplement), the check, findings
-with the quoted source and its stated limits, coverage, provenance.
+> A caregiver needs a low-friction way to record what they noticed when it
+> happens, preserve their exact words over time, and carry that context into a
+> short follow-up visit even when they cannot attend.
 
-**Built as a safe draft, not as a medication record:** `/bag` lets the caregiver
-take or select a medication-bag photo. Claude Sonnet transcribes visible fields
-with an evidence quote and explicit missing/partial/conflicting states; a local
-validator blanks unsupported claims. The image and draft are not persisted.
-The caregiver LINE `紀錄用藥` action links to this page on the deployment that
-received the webhook.
+### 1.2 What is evidence today
 
-**Not built:** correction/confirmation that promotes that draft into the typed
-medication list or longitudinal log, and OCR from an inbound LINE image. Until
-that handoff exists, formal medication checks still start from typed text or
-browser dictation and require a stated source.
-
-### 3.2 The older adult — speaks to ask, never to answer
-
-This is the constraint the whole elder-facing design turns on.
-
-When a shortfall is raised with my father he does not get angry; he goes quiet
-and looks embarrassed. Embarrassment, not forgetfulness, is what closes that
-channel. A product that asks *"did you take it today?"* collects silence, and
-teaches him that opening it costs something.
-
-So he is **never asked to confirm or deny anything**. He asks; asking costs
-nothing. What he gets back is what a medicine is for, in the register's own
-words, in large type.
-
-**Built:** the elder projection, with tests asserting it contains no question
-mark and never mentions a missed dose. Coverage is disclosed to him as well —
-*"there is one I could not identify"* is the system admitting its own limit, not
-asking him to admit anything.
-
-**Built:** browser hold-to-talk for medication intake and on-device read-aloud;
-in LINE, a bound elder can type a medicine name and receive a grounded elder
-narration. The elder rich menu contains no adherence confirmation control.
-
-**Not built:** speech-to-text for an inbound LINE voice message. The webhook
-downloads the audio bytes, logs message metadata only, and then discards the
-bytes; it deliberately sends no answer rather than guessing.
-
-### 3.3 The clinician — a page, not a channel
-
-**The clinician is deliberately not a participant.** A hospital outpatient
-doctor in Taiwan sees forty to sixty patients in a session at roughly three
-minutes each, has no route to adopting a consumer channel per patient, and
-would inherit a support burden by being reachable. Any design that requires the
-physician to install something does not happen.
-
-The brief asks for a summary that is *clinician-reviewable*. A single page
-satisfies that without requiring anyone to install anything, and it can be
-handed over by the family, which is the only distribution channel that actually
-exists.
-
-There is a second reason, and it came out of the interview rather than the
-market. When the son says out loud, in front of his father, that doses get
-missed and the drinking has increased, the father goes quiet. **A sheet delivers
-the same information without staging that moment.**
-
-**Built.** `/summary/[subjectId]` — it leads with the count of items absent
-from the prescription record, then the family's questions with the source
-quoted whole, then everything being taken grouped by where it came from, what
-could not be identified, the change since last time, and what the family
-observed. No recommendation anywhere on it.
-
----
-
-## 4. What makes the answers trustworthy
-
-The depth area is **medication-data grounding**, and the argument is that the
-product never says anything a regulator or a published criterion did not.
-
-- **23,211 dispensable medicines** from the Taiwan FDA permit register, with
-  ingredients parsed and indications quoted. 71,965 records filtered down:
-  revoked permits and raw materials removed.
-- **464 licensed health foods**. 417 carry approved 警語 text and 460 carry
-  注意事項; the fields are optional in the register and are treated as optional
-  in code.
-- **STOPP version 3** (O'Mahony et al. 2023, CC BY 4.0), 8 criteria encoded of
-  133, each quoted word for word.
-- Both registers and both rule sets are **committed to this repository**, so a
-  change to what the product considers risky arrives as a reviewable diff, and a
-  reviewer needs no network access to run it.
-
-Three properties do most of the work:
-
-1. **Clinical judgement ends at the verdict object.** Narration cannot look
-   anything up, and what it writes is checked before anyone sees it: it may not
-   name a medicine outside the verdict, alter quoted text, hide incomplete
-   coverage, state a dose, instruct a change, assert what the person did, or
-   name a clinical outcome in its own words. Those checks are structural and
-   lexical, **not semantic** — see TDD §5 for what that does and does not
-   buy.
-2. **Not knowing is a result.** Three distinct kinds: nothing matched, the name
-   is ambiguous, or the product is named but its composition is not recorded.
-   Coverage travels with the findings everywhere they appear.
-3. **The product never decides.** Severity is an enumeration of two values —
-   consult a pharmacist, consult a physician — and there is a test asserting no
-   third value can appear.
-
-### The line the product will not cross
-
-It raises questions. It does not answer them.
-
-- No dose is ever stated, because the record holds what is present, not how much
-  is taken.
-- Nothing is ever stopped, halved or swapped; that is a prescriber's decision.
-- No claim is made about what the person did. *"You missed it yesterday"* writes
-  itself into a memory that is already reconstructive.
-- A stated limit travels on every finding. STOPP L6 is conditional on 3 g per
-  day, which cannot be observed, so it is raised as a question about dose rather
-  than as a determination.
-
----
-
-## 5. Honestly, what is not built
-
-| Required by the brief | State |
-| --- | --- |
-| Voice-friendly **or highly accessible chat** interaction | **Partial but runnable.** Browser hold-to-talk and read-aloud are built; a LINE elder can type one medicine name and receive a grounded explanation. A caregiver can open a web medication-bag transcription draft from LINE. General natural-language questions and LINE voice STT are not built; inbound audio is discarded after metadata logging and receives no guessed answer. |
-| Explains purpose, timing and interactions with grounded data and clear limits | **Purpose and interactions built; timing is not.** The register's dosing text is not carried into the item model. This is still the strongest of the four. |
-| Structured medication / symptom / adherence log over time | **Built for the demo.** Snapshots and observations use Vercel Blob whenever `BLOB_READ_WRITE_TOKEN` is configured, including local development; otherwise they fall back to process memory. Blob is adequate for one sequential care pair, not concurrent facility writes; Postgres is the production migration. |
-| Clinician- or caregiver-reviewable summary, escalating rather than deciding | **Built.** `/summary/[subjectId]` renders the page a family hands over; escalation is a two-value enumeration checked when rule sets load. |
-
-The LINE delivery adapter is **implemented and offline-tested**
-(`src/lib/delivery/line/**`): webhook signature verification, deduplication,
-role binding, per-user rich menus, elder medicine-name messages, caregiver
-observations, caregiver-initiated elder delivery, optional signed audio, and
-clinician-summary QR image payloads. Browser and LINE write to the same
-`LogStore`. These are code-level, offline-tested capabilities; production LINE
-delivery still depends on the deployment variables and live channel setup.
-
-What remains before a real rollout is authentication, transactional persistence,
-consent/retention policy, STT for LINE voice input, and an operator-grade pairing
-flow. Vercel Blob deliberately supports only this sequential two-phone demo;
-concurrent writes and cross-instance role consistency require a database.
-
----
-
-## 6. Path to a broader chronic-care product
-
-**Widen what is captured, then who reads it.**
-
-1. **Medication → symptom → measurement.** The log already has the shape for an
-   observation with a time and a kind. Blood pressure and glucose readings are
-   the same record with a value attached, and they make the drug-condition
-   criteria — several of which are currently unfirable because they need a
-   number nobody has entered — actually reachable.
-2. **One appointment → a course of care.** Once regimen snapshots accumulate,
-   the interesting object is the change between them: what a department added,
-   what quietly stopped, what nobody restarted after discharge. Hospital
-   discharge is the highest-risk handoff in the whole system and the one where a
-   family is least equipped.
-3. **Family → facility.** The engine transfers. What does not transfer is the
-   potential familiar-voice advantage: a consenting caregiver's voice may help
-   a technology-averse older adult engage, while a facility has no equivalent
-   family relationship. The current demo's optional Serin voice is only a
-   consented stand-in, not the elder's relative. Facility value is continuity
-   across shifts and a defensible record — a different pitch, a different
-   buyer, the same rules and registers underneath.
-4. **Taiwan → elsewhere.** Rule sets are files, and the engine interprets
-   shapes rather than holding medication knowledge, so a new criteria set is a
-   new file. A new *register* is more than that: the two TFDA shapes are typed
-   and the two rule files are named in `registry.ts`, so a second country needs
-   a register adapter as well. Smaller than a rewrite, larger than a file.
-
----
-
-## 7. Risks
-
-**PIM-Taiwan is CC BY-NC.** The Taiwanese criteria are the strongest local
-signal available and their licence forbids commercial use. This build does not
-include them for that reason. A company would need a licence from the authors —
-who are at NTU, which is at least a path.
-
-**Beers is not usable as-is.** The American Geriatrics Society requires written
-permission and its terms bar electronic redistribution. STOPP was chosen partly
-because CC BY 4.0 permits adaptation and commercial use with attribution. That
-choice was made by reading the licences, not by reputation.
-
-**Permissive matching over-raises.** A false positive costs a question to a
-pharmacist; a false negative costs a missed harm. The bias is deliberate, and it
-is stated on the findings rather than hidden — but at scale, alert fatigue is
-the failure mode that kills clinical decision support, and the honest answer is
-that this needs measurement the build has not done.
-
-**Coverage is the real limit, not correctness.** The check is only as good as
-what it can identify, and the items it cannot are disproportionately the ones
-that matter — unlicensed supplements are exactly the invisible category. The
-product is built to say so rather than to look complete.
-
-**Physician adoption is assumed, not tested.** The one-page handover is designed
-around a doctor's three minutes, but no doctor has seen it.
-
----
-
-## 8. Every button, and the problem it exists for
-
-The interface is two rich menus. Each cell below is a product decision, not a
-feature: it answers something a family actually hit, and several of them exist
-in the shape they do because an obvious alternative was rejected.
-
-### 8.1 The older adult — four cells, 2×2
-
-| Cell | The problem | What it does | Why not the obvious thing |
-| --- | --- | --- | --- |
-| **我的藥** | He does not know what he is currently on. The bag is in a drawer, the names are 8pt, and asking his daughter costs him something. | Re-narrates the most recent verified snapshot for him, in his granddaughter's voice, with the times his family set. | Not a stored sentence. Narration is a function of (verdict, role); the same verdict says different things to him and to his daughter, so caching the output would freeze one audience. |
-| **產生回診單** | His daughter cannot take the day off, and in the room he cannot recount three weeks of symptoms. | Mints a signed 8-hour token, renders a QR, sends it as an **image**. He holds it up; the doctor scans. | Not a link. `LINE-ADAPTER-SPEC` §6.1 refuses him one because he taps links without checking — and he is in the population most targeted by fraud. An image is not a link. |
-| **用藥提醒** | "Before or after food" is the question that actually stops someone taking a pill. | Lists the times his caregiver configured. | Refuses to show a schedule when none is set. 「早上一顆、晚上一顆」 assembled from nothing is the product writing a prescription, and he would follow it. |
-| **切換身分** | Setup is done by a caregiver holding two phones, and tapping the wrong card on the right phone left it unrecoverable from inside LINE. | Re-sends the role card. | Gated on `MEDBUDDY_ALLOW_ROLE_SWITCH`, default off. §8.4 explains why the rule it relaxes still stands for a real deployment. |
-
-**Absent on purpose: 「我吃藥了」.** It is the adherence check-in in a nicer
-costume. Being asked whether you took your medicine is being asked to confess,
-and the source interview is explicit that a shortfall raised directly produces
-silence, not information.
-
-### 8.2 The caregiver — six cells, 3×2
-
-| Cell | The problem | What it does |
+| Evidence | What it supports | What it does not support |
 | --- | --- | --- |
-| **記一件事** | The detail that matters — 「自己拿櫃子裡的止痛藥吃,大概三四次」 — does not survive a form. A tired person types 「最近比較不舒服」 and the specificity is gone. | One free-text paragraph, segmented by a model into typed observations. **Every note must appear verbatim in what they typed or it is discarded.** |
-| **紀錄用藥** | Typing eight columns off a pharmacy bag is the reason nobody keeps a medication list. | Photograph or upload; Claude Sonnet transcribes what is printed; the names walk the ordinary grounding path. |
-| **產生回診單** | Same sheet, generated by the person who has the context. | Both phones receive it — image for him, image plus link and an expiry for her. |
-| **服藥提醒** | A reminder at 08:00 has to arrive at 08:00, and a caregiver cannot be the alarm clock. | Up to four daily slots, ≥60 min apart, none in quiet hours. Content is always rule-produced narration. |
-| **傳說明** | Sometimes the answer is needed now, not at the next slot. | Re-runs the pipeline server-side and pushes the result. |
-| **切換身分** | Setup recovery. | Re-sends the role card. |
+| First-person observation in one family | The information gap exists in this household and is costly enough to motivate a prototype. | Prevalence across families, willingness to pay, or clinical outcome improvement. |
+| Working prototype and automated tests | The listed Built paths and bounded safety checks can be demonstrated. | Usability, accessibility, clinical usefulness, or real-world reliability. |
+| TFDA open-data snapshots and selected published criteria | Product-name grounding, source quotation, and a deliberately narrow set of safety signals. | A complete medication reconciliation or comprehensive interaction checker. |
 
-### 8.3 How the cells depend on each other
+The repository contains no documented clinician, pharmacist, caregiver-cohort,
+or older-adult-cohort validation of the complete workflow. The buyer is also
+unknown; “adult child pays” is a hypothesis, not a requirement.
 
-Nothing here is a standalone feature; the value is in the chain.
+### 1.3 Research hypotheses
 
+| ID | Hypothesis | Evidence needed |
+| --- | --- | --- |
+| H1 | A caregiver is more likely to capture a useful observation when they can type one natural paragraph instead of completing a medical form. | Compare completion, time, abandonment, and correction rates for prose versus a structured form. |
+| H2 | Preserving the caregiver's exact wording while adding a small category and timestamp gives clinicians useful specificity without turning the product into the author. | Clinician review of paired raw notes and MedBuddy summaries; measure misinterpretation and scan time. |
+| H3 | A short, attributed longitudinal sheet lets a clinician find medication changes and home observations during a brief visit. | Task-based study with clinicians or pharmacists using realistic cases. |
+| H4 | Text plus an explicitly disclosed AI voice in a warm, granddaughter-style register improves attention or comprehension for some older adults compared with text alone. | Older-adult comprehension, trust, annoyance, and opt-out study. Do not use message opens as a proxy for comprehension. |
+| H5 | A consented, calibrated familiar voice and Taiwanese or other low-resource languages may improve comfort and accessibility. | Speaker consent, intelligibility, dialect review, and comparison against a neutral voice. |
+| H6 | A consented long-term companion memory may improve continuity across care episodes. | Longitudinal study of recall usefulness, correction, deletion, and perceived surveillance. |
+
+MedBuddy **does not claim to prevent, slow, or treat memory decline**. H4–H6 are
+interaction and continuity hypotheses, not cognitive-health claims.
+
+---
+
+## 2. Personas and jobs to be done
+
+### 2.1 Caregiver — primary contributor
+
+**Job:** “When I notice something relevant at home, let me say it naturally and
+trust that my words will still be there when the next appointment happens.”
+
+Needs:
+
+- one low-effort capture action, 「記一件事」;
+- a clear distinction between what they said and what the system inferred;
+- correction, review, and control over what is shared;
+- medication capture that never silently promotes OCR output into the record;
+- a quick way to prepare and share the follow-up sheet.
+
+### 2.2 Older adult — care subject and direct user
+
+**Job:** “When I want to see my medicines or receive a family-configured
+reminder, explain it clearly without testing me, grading me, or pretending to be
+someone I know.”
+
+Needs:
+
+- large, stable LINE actions and a text fallback for audio;
+- uncertainty stated rather than guessed;
+- no adherence score, streak, shame, or demand to confirm whether a dose was
+  taken;
+- visibility into, and a way to contest, information shared about them. This
+  last requirement is **not built**.
+
+### 2.3 Clinician or pharmacist — time-constrained reader
+
+**Job:** “During a short visit, let me scan what changed, what the caregiver
+observed, what the household says is being used, and what remains uncertain.”
+
+The reader should need no MedBuddy account or app for a family-authorized,
+short-lived shared view. “Clinician-scannable” is a target to test, not a claim
+that the current page fits one printed page or a three-minute workflow.
+
+### 2.4 Role is not subject
+
+- A **role** selects the elder or caregiver LINE experience.
+- A **subject** is the person whose care record is being viewed.
+- The same LINE account can use 「切換身分」 to re-open role selection when the
+  deployment enables `MEDBUDDY_ALLOW_ROLE_SWITCH` and its claim gate permits
+  that account to select both roles. Explicit per-role recipient IDs still pin
+  each account to its configured role.
+- Switching role does **not** switch the subject. Subject selection and a
+  multi-person roster are not built.
+- Role selection is interface state, not sufficient production authorization.
+
+---
+
+## 3. Product promise and scope
+
+### 3.1 Core promise
+
+> **Capture what the caregiver noticed, keep their words, and make the care
+> context scannable at the next visit.**
+
+The primary value chain is:
+
+```text
+caregiver prose
+  → validated segmentation + verbatim observations
+  → attributed longitudinal record
+  → medication context + change since last check
+  → short-lived clinician follow-up sheet
 ```
-紀錄用藥 (bag OCR)
-      │  drug names as ordinary text
-      ▼
-STEP 01 用藥核對  ──────────► verdict ──► 我的藥        (his answer)
-      │                          │
-      │                          └──────► 服藥提醒      (scheduled, same words)
-      │                          └──────► 傳說明        (immediate, same words)
-記一件事 (observations)
-      │
-      └──────────────────┬──► 產生回診單 ──► QR ──► the clinician's table
-                         │
-                    (both are on the sheet: what he takes, and what
-                     the family noticed — the second is what a
-                     three-minute appointment cannot otherwise get)
+
+Medication capture and elder delivery support that wedge:
+
+```text
+bag photo/upload → evidence-only OCR draft → human review → medication check
+                 → snapshot → 我的藥 / follow-up sheet
+
+caregiver schedule → bounded reminder text → optional disclosed Serin AI audio
+                   → elder LINE
 ```
 
-**The dependency that matters:** every path to the older adult's ear or screen
-passes through the same verdict. 我的藥, 服藥提醒 and 傳說明 differ in *when*
-they speak, never in *what* they may say.
+### 3.2 Product principles
 
-### 8.4 Two constraints relaxed for the demo, recorded rather than hidden
+1. **One fact, explicit provenance.** Caregiver words, printed bag text,
+   registry text, rule output, and product-authored interface copy must remain
+   distinguishable.
+2. **Human confirmation before clinical projection.** OCR is evidence capture,
+   never authority.
+3. **Uncertainty is an output.** Unresolved and ambiguous items remain visible.
+4. **Same safety pipeline, not necessarily same data.** All medication
+   explanations should use grounding → rules → verdict → narration, but the
+   current input sources are not yet unified.
+5. **The clinician decides.** The product prepares information and questions;
+   it does not diagnose, prescribe, or recommend stopping or changing a drug.
+6. **Warmth must not become impersonation or advice.** Serin is an AI-generated
+   demo voice in a granddaughter-style register, not the older adult's actual
+   granddaughter.
 
-| Constraint | Original argument | Why relaxed | Where it lives |
+---
+
+## 4. Domain model
+
+| Term | Product meaning | Current limitation |
+| --- | --- | --- |
+| `Subject` | Person whose care record is represented. | Seeded prototype subject; no subject picker or roster. |
+| `RoleBinding` | A LINE user’s selected `elder` or `caregiver` projection for one subject. | Feature-flagged re-selection; not full identity, consent, or authorization. |
+| `Observation` | Caregiver-attributed verbatim note with category and recorded time. | `observedAt` is receipt time, not necessarily when the event happened; no edit/delete workflow. |
+| `ElderQuestion` | A medicine question asked by the older adult. | **Not modeled.** The demo stores it as an observation with the sentinel `elder-asked`, which can be misattributed in the summary. |
+| `RegimenSnapshot` | Result of one medication-check request, including input, verdict, and creation time. | It is not “verified”: there is no reviewer or confirmation status. |
+| `GroundedItem` | A caregiver-entered name resolved or explicitly unresolved against loaded registries. | Exact/contained-name matching is not medication identity verification. |
+| `Finding` | A selected rule signal with quote, provenance, limits, and escalation target. | Only a small subset of possible medication risks is implemented. |
+| `SubjectSchedule` | Up to four caregiver-configured clock times. | Not linked to individual medicines, doses, or meal timing. |
+| `ClinicianSummary` | Projection of the latest check plus longitudinal observations and changes. | Current wording and filtering contain known attribution issues. |
+
+No surface may call a snapshot “verified,” an elder question a caregiver
+observation, or a caregiver-declared source a verified prescription-record
+fact.
+
+---
+
+## 5. End-to-end workflows
+
+### 5.1 Primary wedge: 「記一件事」 to follow-up sheet
+
+1. The caregiver taps 「記一件事」 and types one natural paragraph.
+2. The system optionally asks Gemini to segment the paragraph into
+   `symptom`, `self_medication`, `alcohol`, `missed_dose`, or `other`.
+3. Every accepted note must be an exact substring of the caregiver's input. If
+   extraction is unavailable or untrustworthy, the complete paragraph is
+   stored as `other`; the system does not rewrite it.
+4. All observations from one message are appended in one store operation so a
+   stale read cannot discard sibling observations.
+5. The longitudinal log retains recorded time, category, verbatim note, and
+   reporter attribution.
+6. The caregiver previews a follow-up sheet combining the latest medication
+   check, changes since the previous snapshot, unresolved items, rule-derived
+   questions, and observations.
+7. The family creates a signed, short-lived QR/link for the clinician.
+
+**Current status: Partial.** Natural-language capture, safe segmentation,
+append-only persistence, summary projection, and signed sharing exist. Event
+time, editing/deletion, date filtering, older-adult review/consent, clinician
+validation, page-length control, and correct separation of elder questions are
+missing.
+
+### 5.2 Medication bag to 「我的藥」
+
+1. A caregiver takes a photo or uploads JPEG, PNG, or WebP.
+2. OCR transcribes only visible printed fields and returns per-field status,
+   evidence, provenance, and review reasons. Missing text remains missing.
+3. The result is visibly labeled as a draft.
+4. In the embedded dashboard flow, the caregiver chooses to add readable names
+   to the editable medication list and then explicitly runs the medication
+   check.
+5. The resolver and rule engine produce a snapshot; 「我的藥」 reads the most
+   recent check snapshot.
+
+**Current status: Partial.** Camera/upload and evidence-only OCR are built. The
+standalone `/bag` flow opened from LINE remains draft-only and requires manual
+re-entry. The embedded handoff emits the source token `rx`, while the medication
+parser accepts `prescription`; it therefore degrades to `unknown`. The snapshot
+schema and elder narration can carry intake fields, and the seed script writes
+demo intake, but the ordinary caregiver-confirmed OCR flow does not write those
+fields. Do not claim OCR-to-record completion until that writer and its
+end-to-end tests land.
+
+### 5.3 Caregiver-configured reminder and explanation
+
+1. The caregiver configures up to four enabled clock-time slots, at least 60
+   minutes apart.
+2. At a due slot, the delivery path produces grounded elder-facing text and may
+   synthesize the same message with the consented Serin demo profile.
+3. LINE receives text even when audio generation or hosting fails.
+4. The caregiver may also trigger an immediate explanation from LINE.
+
+**Current status: Partial.** Schedule editing, bounds, due/late/idempotency
+logic, text delivery, optional Fish Audio delivery, and the consented Serin
+profile exist. The deployed Vercel Hobby cron runs once daily, so it cannot
+deliver arbitrary configured times on time; the demo manually drives the
+endpoint. Scheduled and immediate LINE delivery currently use seeded cupboard
+data rather than the latest snapshot. Slots are generic and cannot truthfully
+answer which medicine, dose, or before/after-meal instruction belongs to a
+time.
+
+Serin must always be disclosed as **AI-generated, granddaughter-style audio**.
+It is not the recipient's family member. Current framing asks 「今天還好嗎？」,
+which solicits an unmodeled self-report, and adds the ungrounded behavior
+suggestion 「有空的話起來走一走，不要坐太久」 except for a hard-coded fall-risk
+condition. The latter violates the requirement that the system must not invent
+health or behavior advice. Both are known boundary gaps to remove or explicitly
+redesign and validate before this framing is accepted.
+
+### 5.4 Role re-selection
+
+1. Either rich menu can offer 「切換身分」.
+2. The action re-opens the role card; it must not silently invert the role.
+3. The user selects elder or caregiver, and the server re-links the matching
+   menu when role switching is enabled.
+4. The bound subject remains unchanged.
+
+**Current status: Partial, feature-flagged.** Re-selection, server-side action
+allowlists, and binding checks exist. Cross-role re-selection works only when
+the flag is on and the claim gate permits the selected role. Explicit elder and
+caregiver recipient IDs pin each account to one role; open mode does not enforce
+one account per role or automatically swap two mistaken bindings. This is demo
+recovery, not a production consent or authorization model.
+
+---
+
+## 6. Functional requirements, status, and acceptance
+
+| ID | Requirement and reason | Status | Acceptance and current evidence/gap |
 | --- | --- | --- | --- |
-| An elder binding is terminal | The caregiver surface holds what the family wrote about him, in their words, without his being asked. That surface existing at all depends on his never reaching it. | `canClaimDemoRole` now refuses every phone but the two the deployment names, so the gate does the guarding and the rule was left stranding legitimate setup. | `src/lib/roles/bind.ts`, `MEDBUDDY_ALLOW_ROLE_SWITCH` |
-| No 疊字, no 「囉」「喔」 | A product that treats him as declining may help make that true. | The register a family uses with each other is not the register a product should use. 「阿公」 from his granddaughter's actual voice is warmth; 「使用者您好」 is distance. | `src/lib/delivery/reminder-framing.ts` |
+| FR-01 | A caregiver can submit one ordinary-language observation from LINE or web, because capture must fit the moment it occurs. | **Built** | Blank input is rejected; valid input produces one or more categorized observations; every stored note is verbatim input. `observations/parse.ts` and its tests enforce substring preservation and fallback. |
+| FR-02 | Observations form an attributed longitudinal record rather than a disposable chat transcript. | **Partial** | Batch append and chronological storage exist. Acceptance additionally requires occurrence date, correction, deletion, period filtering, retention policy, and subject review/consent. |
+| FR-03 | The follow-up sheet exposes latest medication context, change, uncertainty, and caregiver observations for rapid scan. | **Partial** | Current page renders these sections. It must stop calling caregiver-declared sources “not in the prescription record,” exclude `elder-asked` sentinels, remain usable with long histories, and pass clinician scan tests. |
+| FR-04 | A family can share the sheet without requiring clinician installation. | **Built** | A signed, expiring token produces the shared view and QR. Its payload is base64-decodable and contains `subjectId`; signing provides integrity and expiry, not encryption or confidentiality. The caregiver route is unauthenticated; see NFR-03. |
+| FR-05 | OCR transcribes medication-bag evidence without identifying a drug from appearance or filling missing fields. | **Built** | Every field has value/status/evidence; missing or conflicting text is visible; the API writes no log entry. Provider availability is required. |
+| FR-06 | OCR content reaches 「我的藥」 only after caregiver review and the ordinary medication-check path. | **Partial** | Embedded draft → editable list → check exists, but `rx` currently becomes `unknown`; standalone `/bag` does not hand off. Seeded snapshots demonstrate intake rendering, but the normal OCR confirmation path does not persist intake details. |
+| FR-07 | Medication names are grounded and uncertainty is retained before rules or narration. | **Built, bounded** | Resolution uses the loaded TFDA datasets; ambiguous/no-match items remain unresolved. This is name matching, not identity verification. |
+| FR-08 | Findings quote their source and direct the user to a pharmacist or physician without prescribing. | **Built, bounded** | The prototype implements 8 of 133 STOPP-derived rules and 3 TFDA health-food warning rules. Conditions are seeded; coverage is not comprehensive. |
+| FR-09 | 「我的藥」 uses the most recent medication-check snapshot and role-specific narration. | **Built** | No snapshot produces an explicit empty state; latest snapshot is re-narrated. It must be called “latest check,” not “verified/current,” until staleness and confirmation are modeled. |
+| FR-10 | A caregiver can add/remove bounded reminder times in LINE and web. | **Built** | Maximum four slots, valid `HH:mm`, at least 60 minutes apart, explicit empty schedule, and no invented default time. |
+| FR-11 | A configured reminder reaches the elder once, near its configured time, as text plus optional disclosed Serin audio. | **Partial** | Due/idempotency and delivery are tested; production-frequency triggering, latest-snapshot input, end-to-end delivery monitoring, and removal of unmodeled self-report prompts and ungrounded advice remain open. |
+| FR-12 | The same LINE account can deliberately reselect elder/caregiver role without changing subject. | **Partial, feature-flagged** | 「切換身分」 re-opens selection and subject ID remains fixed. Explicit per-role recipient IDs prevent cross-role claims; open mode allows them but does not enforce one-per-role or auto-swap. Production authorization is not included. |
+| FR-13 | A user can switch among multiple care subjects. | **Not built** | No subject roster, picker, relationship authorization, or per-subject consent exists. This is distinct from role switching. |
+| FR-14 | The product uses a real relative's familiar voice through consented cloning/calibration. | **Not built** | Current audio is Serin, a consented demo voice. Future acceptance requires speaker and recipient consent, disclosure, revocation, deletion, abuse controls, and intelligibility evaluation. |
+| FR-15 | Taiwanese and other low-resource languages are first-class input/output options. | **Not built** | Acceptance requires dialect-specific transcription and synthesis evaluation with native speakers, a text fallback, and explicit handling of uncertainty. |
+| FR-16 | A long-term companion memory carries consented context across care episodes. | **Not built** | Future memory must be inspectable, attributable, correctable, exportable, and deletable. It must not infer cognitive status or claim to prevent memory decline. |
 
-Both default off, and both keep the part that is about *him* rather than about
-tone: no reminder asks whether he took anything, reports what he did, or counts
-a streak. `assertNoSelfReport` makes that a throw rather than a comment.
+---
+
+## 7. Non-functional requirements, status, and acceptance
+
+| ID | Requirement | Status | Acceptance and current gap |
+| --- | --- | --- | --- |
+| NFR-01 | **Clinical safety:** product-authored text must not diagnose, prescribe, change dose, recommend stopping a medicine, solicit an unmodeled health self-report, or add health/behavior advice. | **Partial** | Medication verdicts and deterministic fallback are bounded, but semantic entailment is not proven; current granddaughter-style framing asks a well-being question and adds ungrounded movement advice. Verified source quotations may contain dosing text; the system must not author new dosing instructions. |
+| NFR-02 | **Provenance:** every medication projection identifies dataset/rule versions and distinguishes quote, caregiver report, OCR evidence, and product copy. | **Partial** | Verdict provenance and source quotations exist. OCR `rx` degradation and summary source wording violate the full requirement. |
+| NFR-03 | **Access control:** only authorized participants can read/write a subject's health data. | **Partial / not suitable for real data** | Signed clinician links expire and resist tampering, but their payload is not confidential. Direct `/summary/[subjectId]` and health-data write/share routes have no user authentication; role binding is not authorization. |
+| NFR-04 | **Privacy and consent:** collection, third-party processing, retention, sharing, correction, and deletion are explained and controlled. | **Not built** | OCR images are processed by Anthropic even when the app does not persist them; caregiver prose may be processed by Gemini; narration may be sent to Fish Audio. There is no end-user consent, retention, deletion, or data-subject review flow. |
+| NFR-05 | **Reliability:** one user action produces one durable write; scheduled delivery is at-most-once and observable. | **Partial** | Batch observation append, one-snapshot-per-check behavior, and slot idempotency have tests. Provider failures, deployment timing, eventual consistency, retry policy, and operator recovery are not end-to-end validated. |
+| NFR-06 | **Accessibility:** older-adult tasks work with large targets, readable text, text alternatives, keyboard/screen reader, and supported speech fallback. | **Partial** | LINE uses stable menu actions and audio has text fallback. No WCAG audit, screen-reader study, contrast/tap-target measurement, or supported-browser matrix exists; LINE speech-to-text is not built. |
+| NFR-07 | **Performance:** capture and summary interactions remain usable on a mobile connection. | **Not measured** | Establish p50/p95 budgets for note acknowledgement, OCR draft, medication check, summary load, audio delivery, and provider timeout behavior before claiming performance. |
+| NFR-08 | **Auditability:** safety-relevant outputs can be reproduced from input, source versions, rules, and configuration. | **Partial** | Verdict provenance and deterministic fallback help; provider/model versioning, user corrections, consent events, and delivery receipts need durable audit records. |
+
+Until NFR-03 and NFR-04 are met, the public prototype may use only synthetic or
+appropriately de-identified data and must not promise confidentiality for real
+patient information.
+
+---
+
+## 8. Safety and privacy boundaries
+
+### 8.1 Medication boundary
+
+- Grounding recognizes names against loaded registry snapshots; it does not
+  confirm that the physical product is what the name suggests.
+- Unresolved items stay unresolved and are included in coverage statements.
+- Rules generate selected safety signals and questions, not a comprehensive
+  interaction review. Absence of a finding is not evidence of safety.
+- The validator checks structural and lexical constraints; it is not a general
+  semantic-entailment proof.
+- Medication names, quotes, coverage, limits, and escalation must come from the
+  verdict. Product-authored framing may add interface guidance and disclosed
+  emotional tone, but no medication, health, exercise, diet, or adherence
+  recommendation.
+- The clinician or pharmacist remains responsible for interpretation and care
+  decisions.
+
+Current repository data coverage, retrieved 2026-07-28:
+
+- 23,211 TFDA drug-license rows;
+- 464 TFDA health-food registration rows, including 10 permits marked
+  「本證失效」; 417 warning and 460 precaution entries are present in the
+  snapshot;
+- 8 implemented STOPP-derived rules out of 133 criteria, plus 3 selected
+  health-food warning rules.
+
+These counts describe the repository snapshot, not clinical completeness.
+
+### 8.2 OCR boundary
+
+- OCR transcribes visible printed evidence only.
+- No confidence score may auto-approve a row.
+- Every row requires human review; unreadable fields remain blank.
+- The app must say “not stored by MedBuddy” separately from “processed by a
+  third-party provider.” It must not imply that the image never left the
+  device.
+- No OCR draft reaches the longitudinal record until a caregiver explicitly
+  confirms the medication list and runs the ordinary check.
+
+### 8.3 Voice boundary
+
+- Audio is optional; text is the canonical fallback.
+- The interface identifies Serin audio as AI-generated and granddaughter-style
+  rather than claiming it is a relative.
+- A future familiar voice requires consent from both speaker and recipient,
+  revocation, deletion, visible disclosure, and misuse prevention.
+- Tone may be warm but must never claim the elder took or missed a dose, ask for
+  compliance proof, solicit a health report that the product cannot represent,
+  imitate a family member deceptively, or introduce health advice outside
+  grounded content.
+
+### 8.4 Information sharing and older-adult agency
+
+The follow-up sheet labels caregiver observations as caregiver reports. A
+future real deployment must let the care subject understand what is collected,
+see what will be shared when appropriate, request correction, and revoke
+sharing. Avoiding an embarrassing conversation is not sufficient consent to
+create a hidden report about someone.
+
+---
+
+## 9. Metrics and evaluation plan
+
+No target below has been achieved yet unless explicitly stated. Initial targets
+are decision thresholds to validate, not reported results.
+
+| Outcome | Initial metric | Proposed acceptance target |
+| --- | --- | --- |
+| Low-friction observation capture | Completion time and abandonment from opening 「記一件事」 to durable acknowledgement. | Median under 60 seconds and at least 90% task completion in a moderated caregiver study. |
+| Fidelity | Percentage of stored observation text present verbatim in input; lost siblings from a multi-observation paragraph. | 100% verbatim containment and zero lost accepted observations in the evaluation set. |
+| Longitudinal usefulness | Caregiver can find, correct, and select the relevant visit period. | At least 90% complete without facilitator help after correction/filter features exist. |
+| Clinician scan | Time and accuracy finding changed medicines, unresolved items, and the highest-priority home observation. | At least 80% of clinicians find all three within 30 seconds; validate or revise the threshold with participants. |
+| OCR safety | Invented-field rate, readable-name transcription accuracy, and human-confirmation bypasses. | Zero invented fields and zero path to persistence without explicit review; measure transcription accuracy on a consented Taiwanese bag set. |
+| Reminder reliability | On-time and duplicate delivery rate. | At least 99% within ±2 minutes and zero duplicates in a staged reliability test before calling reminders production-ready. |
+| Elder comprehension and trust | Correct paraphrase of what the message says, disclosure recognition, annoyance, and opt-out success. | Better than text-only or neutral-voice baseline without lower disclosure recognition; no cognitive-decline outcome claim. |
+| Privacy readiness | Authentication, consent, retention/deletion, and subject-access review. | All completed before real identifiable health data is permitted. |
+
+Evaluation sequence:
+
+1. Five caregiver usability sessions on note capture, correction, and medication
+   bag review.
+2. Five clinician/pharmacist scan tests on realistic, de-identified summaries.
+3. Older-adult comprehension and trust sessions comparing text, Serin AI audio,
+   and a neutral voice.
+4. Only after the above, a consented longitudinal pilot measuring continuity and
+   correction—not memory decline.
+
+---
+
+## 10. Non-goals for the current product
+
+- Diagnosing disease or providing medication, dose, diet, exercise, or
+  treatment recommendations.
+- Proving that an item is absent from a prescription record.
+- Comprehensive drug–drug, drug–condition, or supplement interaction checking.
+- Monitoring ingestion, scoring adherence, or asking the older adult to prove a
+  dose was taken.
+- Preventing or slowing memory decline.
+- Impersonating an actual family member.
+- Switching among multiple care subjects, facility rosters, or complex care
+  teams.
+- EHR integration, autonomous clinician messaging, or clinician account
+  management.
+- Use of real identifiable health data before authentication, consent,
+  retention, and deletion requirements are met.
+- Claiming an unaccompanied visit has the same outcome as an accompanied one.
+
+---
+
+## 11. Roadmap
+
+### P0 — Make the primary wedge truthful and safe
+
+1. Separate `ElderQuestion` from caregiver `Observation` and exclude sentinels
+   from caregiver summary sections.
+2. Rename summary source claims to “caregiver-declared non-prescription source.”
+3. Fix OCR `rx` → `prescription`, make the ordinary reviewed OCR flow write its
+   confirmed intake fields to the snapshot, and add an end-to-end test. The
+   seed-only intake path is evidence of rendering, not of capture.
+4. Make latest confirmed/check snapshot the single regimen source for
+   「我的藥」, immediate send, reminders, and the follow-up sheet.
+5. Remove ungrounded movement/health advice from warm framing.
+6. Add authentication to direct summary and write/share routes; define consent,
+   retention, correction, deletion, and subject visibility.
+7. Replace the once-daily demo trigger with a scheduler that can meet the stated
+   delivery SLO, or label reminders as manual demo behavior.
+
+### P1 — Validate and improve the handoff wedge
+
+1. Capture event occurrence time separately from receipt time.
+2. Add caregiver correction/deletion and visit-period selection.
+3. Bound long summaries and design print behavior from clinician scan studies.
+4. Evaluate note capture with caregivers and summary scan with clinicians or
+   pharmacists; revise the information hierarchy from evidence.
+5. Add delivery receipts, failure recovery, and operator-visible audit events.
+
+### P2 — Voice and language research
+
+1. Compare disclosed Serin AI audio, neutral audio, and text-only output.
+2. Prototype familiar-voice cloning/calibration only with speaker and recipient
+   consent, revocation, deletion, and anti-impersonation controls.
+3. Evaluate Taiwanese and other low-resource languages with native speakers;
+   preserve text fallback and uncertainty.
+
+### P3 — Consented long-term continuity
+
+1. Design an inspectable, attributable, correctable, exportable, and deletable
+   memory layer.
+2. Evaluate whether it improves continuity across visits without inferring
+   cognitive status or making prevention claims.
+3. Add multi-subject and multi-caregiver relationships only after authorization
+   and consent semantics are defined.
+
+---
+
+## 12. Challenge rubric traceability
+
+The repository does not contain the challenge's original prompt or scoring
+rubric. This is a provisional mapping to the requirements paraphrased in the
+earlier PRD; the original rubric must be attached before claiming complete
+coverage.
+
+| Paraphrased requirement | User job | Current implementation evidence | Status and limitation | Next acceptance evidence |
+| --- | --- | --- | --- | --- |
+| Voice/chat support | Older adult can receive or request a clear explanation; caregiver can record naturally. | Browser speech controls, LINE text flows, optional Fish Audio, Serin demo profile. | **Partial:** no LINE speech-to-text, no accessibility study, and Serin is not a family voice. | Supported-device matrix, elder comprehension/disclosure study, audio failure test. |
+| Personalized medication purpose, timing, and interactions | Family understands the recorded medicines and knows what to ask a professional. | TFDA grounding, selected rules, role-specific narration, generic caregiver schedule. | **Partial:** timing is not medication-specific; rules are 8/133 STOPP plus 3 health-food signals, not comprehensive interactions. | Gold-set grounding/rule evaluation; no false completeness language; medication-specific timing only from confirmed printed evidence. |
+| Structured medication, symptom, and adherence log | Caregiver can preserve home context across visits. | Snapshots, categorized observations, batch append, change diff. | **Partial:** no per-dose adherence event, occurrence time, correction/deletion, retention, or subject review. | End-to-end longitudinal task test and data lifecycle acceptance. |
+| Physician-ready summary | Clinician can scan relevant context without installing an app. | Latest-check projection, changes, uncertainties, observations, source quotes, signed QR. | **Partial:** source and elder-question attribution bugs, unbounded length, no documented clinician-validation evidence in the repo, and direct route lacks auth. | Clinician scan study, print/length test, corrected labels/filtering, authenticated caregiver access. |
+
+### Required submission evidence
+
+For each rubric row, submission material must link:
+
+```text
+requirement → user job → current surface → automated/manual evidence
+            → known limitation → next validation
+```
+
+Do not upgrade a status based on a script, screenshot, or mocked provider alone.
+The status changes only when the stated acceptance condition is demonstrated.

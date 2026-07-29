@@ -108,27 +108,35 @@ export async function lastCheckNarration(
   // reading the same verdict gets it plain — the framing is for him.
   let text = narration;
   if (role === "elder" && narration.trim()) {
-    const { frameMyMeds } = await import("./reminder-framing");
+    const { frameMyMedsWarm } = await import("./reminder-framing");
     const { BlobScheduleStore, InMemoryScheduleStore } = await import(
       "../schedule/store"
     );
+    const { findSubject } = await import("../subjects");
     const store = process.env.BLOB_READ_WRITE_TOKEN
       ? new BlobScheduleStore()
       : new InMemoryScheduleStore();
     const schedule = await store.get(subjectId).catch(() => null);
-    const { findSubject } = await import("../subjects");
-    text = frameMyMeds(narration, {
+
+    // Built from the verdict rather than by filtering narration prose: the
+    // indication text is omitted, and omitting is not the same as rewording.
+    // A finding, however, travels verbatim — it is the one thing he needs.
+    text = frameMyMedsWarm({
+      items:
+        latest.intake ??
+        latest.verdict.items
+          .filter((item) => item.resolved)
+          .map((item) => ({ name: item.nameZh ?? item.inputText })),
+      // `verbatim` is the source's own wording, carried through untouched —
+      // the only string in this message the product did not choose.
+      warnings: latest.verdict.findings.map((f) => f.verbatim).filter(Boolean),
       slotTimes: (schedule?.slots ?? [])
         .filter((slot) => slot.enabled)
         .map((slot) => slot.timeOfDay),
-      // Drives the movement aside: warmth by default, silence where the
-      // record says encouraging more walking needs a fall-risk assessment
-      // this product does not have.
       conditions: findSubject(subjectId)?.conditions ?? [],
-      // Written by bag OCR; absent on a snapshot built from a typed list.
-      intake: latest.intake,
     });
   }
+
   // VOICE-DELIVERY-SPEC §5 — an empty narration is sent as nothing, never as a
   // default sentence.
   return { text: text.trim(), fromPipeline: true };

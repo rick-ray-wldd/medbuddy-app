@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 import { findSubject } from "@/lib/subjects";
 import { getRegistry } from "@/lib/registry";
 import { narrate } from "@/lib/narration/narrate";
-import { frameMyMeds } from "@/lib/delivery/reminder-framing";
+import { frameMyMedsWarm } from "@/lib/delivery/reminder-framing";
 import { narrationHash } from "@/lib/delivery/prerendered-speech";
 
 export async function GET(request: Request) {
@@ -53,9 +53,14 @@ export async function GET(request: Request) {
   // Same arguments the LINE path passes, so the preview cannot drift from
   // what he actually receives — which is the only reason to show it at all.
   const text = narration.trim()
-    ? frameMyMeds(narration, {
+    ? frameMyMedsWarm({
+        items:
+          latest.intake ??
+          latest.verdict.items
+            .filter((i) => i.resolved)
+            .map((i) => ({ name: i.nameZh ?? i.inputText })),
+        warnings: latest.verdict.findings.map((f) => f.verbatim).filter(Boolean),
         slotTimes: slots,
-        intake: latest.intake,
         conditions: subject.conditions,
       })
     : narration;

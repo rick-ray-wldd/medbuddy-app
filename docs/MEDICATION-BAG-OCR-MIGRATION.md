@@ -3,8 +3,10 @@
 > Audience: the Claude Code agent integrating medication-bag images into the
 > existing LINE workflow.
 >
-> Status: **design and machine-readable output contract only**. This document
-> does not claim that OCR is implemented in the application.
+> Status: the first web-only extraction slice is implemented in `src/lib/ocr/`,
+> `/api/ocr/bag`, and `/bag`. It returns a human-review-required draft and never
+> persists the image or draft. LINE image acquisition, editable confirmation,
+> and promotion through grounding into the log remain migration work below.
 
 ## 0. Evidence we actually have
 
@@ -554,4 +556,3 @@ Add offline tests for every acceptance criterion in §11. Preserve existing
 tests and exact run commands. Before editing, report any conflict between this
 contract and the current code or LINE UX specification.
 ```
-

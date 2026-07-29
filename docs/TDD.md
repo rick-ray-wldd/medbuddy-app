@@ -7,8 +7,9 @@ Live: https://medbuddy-app.vercel.app
 
 Next.js 16 (App Router) · TypeScript · Tailwind 4 · Vitest · deployed on Vercel.
 Run `npm test` for the current exact test count. No authentication; Vercel Blob
-is the demo persistence layer, while LINE, Gemini observation extraction, and
-optional Fish Audio are explicit external boundaries (§2, §8).
+is the demo persistence layer, while LINE, Anthropic medication-bag
+transcription, Gemini observation extraction, and optional Fish Audio are
+explicit external boundaries (§2, §8).
 
 ---
 
@@ -33,7 +34,12 @@ configured, the role claim is allowlisted and a third phone is rejected. The
 legacy `LINE_ELDER_USER_ID` remains an elder-only migration fallback.
 
 The browser has no subject selector. `/api/line/deliver`, clinician-summary QR
-delivery, `找家人`, and the caregiver roster all resolve through this same pair.
+delivery, and all current rich-menu actions resolve through this same pair.
+Legacy `reach_family` and caregiver-roster postback handlers do as well, though
+neither is exposed by the current 2×2 menus.
+The server-rendered web hub reads role-link states and log counts without
+returning either opaque LINE User ID to the client. It is a read-only projection
+of `RoleStore` and `LogStore`, not an independent clinical database.
 Other synthetic subjects remain fixtures for grounding/rule tests; they are not
 part of the public demo. Dynamic claims cannot safely allocate “the first elder
 slot” through Vercel Blob because Blob is not transactional, so the two LINE
@@ -49,7 +55,7 @@ target many-to-many model remains in `docs/DATA-MODEL.md`.
 ## 0. The shape, and the one rule that produces it
 
 ```
-input (photo | text | speech)
+input (typed text | browser dictation)
       │
       ▼
 grounding/   resolve free text against the TFDA registers
@@ -64,8 +70,20 @@ verdict/     the single object carrying every clinical judgement
 narration/   translate a verdict into language — receives only the verdict
       │
       ▼
-delivery/    web and LINE behind the same interface
+surfaces/    web renders API results; LINE sends through the Delivery adapter
 ```
+
+The separate `/bag` route is a built, web-only transcription draft:
+
+```text
+photo → Claude vision transcription → evidence validator → review-only draft
+                                                        ↛ LogStore
+```
+
+It deliberately has no write edge into grounding or the longitudinal log yet.
+Caregiver confirmation/correction and promotion into the ordinary typed check
+path, plus inbound LINE-image handling, remain future work. Browser dictation
+only fills the same text input and does not bypass grounding or the rule engine.
 
 > **Clinical judgement ends at the verdict object.**
 
@@ -162,18 +180,23 @@ Reverse matching is now confined to health foods:
 
 ## 2. Voice and chat architecture
 
-**Speech in and out, on the device.** `SpeechRecognition` (`zh-TW`) behind a
+**Browser speech in and out.** `SpeechRecognition` (`zh-TW`) behind a
 hold-to-talk button — holding rather than toggling because it is the gesture
 already used to send a LINE voice message, so the person this was designed
 around performs it without being taught. `speechSynthesis` reads the narration
-back at 0.85 rate. Neither leaves the device, neither needs a key, both work
-offline, and a browser without them shows no button rather than a dead one.
+back at 0.85 rate. MedBuddy makes no server-side speech-recognition request and
+requires no application key for these browser APIs. Their availability,
+processing location, and offline behaviour are browser/vendor dependent, so
+offline recognition is not guaranteed. A browser without support shows no
+button rather than a dead one.
 
 The caregiver web dashboard has no adherence control for the elder. In LINE, a
 bound elder may type a medicine name; the inbound seam grounds it, builds a
 verdict, narrates for the elder audience, records the question, and replies.
-Inbound LINE audio is downloaded and recorded but has no STT path, so it is not
-answered. This is an explicit failure boundary rather than a substitute guess.
+Inbound LINE audio is downloaded transiently by the webhook, but the handler
+logs message metadata only and discards the bytes. There is no persistence or
+STT path, so it is not answered. This is an explicit failure boundary rather
+than a substitute guess.
 
 The register records dosing text, and **timing is not carried into the item
 model** — so "explains purpose, timing and interactions" is true of purpose and
@@ -187,21 +210,21 @@ registers a **private** model from samples the caregiver records, then
 synthesises against it. The request shapes follow the ones already in
 production in my own app.
 
-Three constraints are in the code rather than the prose. A profile cannot be
-created without a consent statement — there is no default to fall back on. The
-model is always `visibility: private`. And a provider response carrying no
-model id **fails** rather than storing a profile, because a voice that appears
-in the older adult's options and stays silent when he presses it is worse than
-no option.
+The calibration helper enforces three constraints: a consent statement is
+required, Fish model creation is always `visibility: private`, and a provider
+response without a model id fails. There is no user-facing calibration or voice
+registration flow in this build.
 
-There is no route to a voice that is not the caregiver's own. The sanctioned
-outbound path is caregiver-initiated `/api/line/deliver`; without a configured
-consented voice profile it sends text only. A deceased person cannot consent.
+The demo outbound route can receive a `voiceId` or read
+`MEDBUDDY_DEMO_VOICE_ID`, but a request-supplied id must match the server-side
+demo voice catalogue; an unregistered id is rejected with HTTP 400. The only
+committed entry is the consented Serin demo profile. Serin is a stand-in, not
+the father's family member, and there is no user-facing registration flow.
 
-⚠️ **This is the one place health information leaves the process**, which is why
-it is opt-in per subject rather than the default, and why the browser voice —
-which sends nothing anywhere — is what runs without configuration. A test
-asserts that with no key set, no request is made at all.
+Fish Audio is one of several explicit external boundaries described in §8. It
+is opt-in through both a voice id and `FISH_AUDIO_API_KEY`; without them the
+outbound path sends text only. A test asserts that without a key no Fish request
+is made.
 
 ### Why LINE, and why not a phone call
 
@@ -210,9 +233,12 @@ record a voice message. He also **taps links without checking**, which is one of
 the few concrete facts available about him and which rules out sending him any
 link at all: a voice message has to be self-contained.
 
-Delivery sits behind an interface (`src/lib/delivery/types.ts`) carrying two
+LINE delivery sits behind an interface (`src/lib/delivery/types.ts`) carrying two
 rules: the adapter holds **no medical logic**, and text is sent **verbatim** —
 an adapter that cannot send a message as-is must fail rather than alter it.
+The browser does not use that transport adapter: it renders the check API's
+verdict/narration directly. Both surfaces still share the same grounding,
+rules, verdict, narration, and `LogStore` layers.
 
 **The LINE adapter exists** (`src/lib/delivery/line/**`), written by a
 collaborator to `docs/LINE-ADAPTER-SPEC.md`. The spec fixed a path boundary so
@@ -238,16 +264,22 @@ and is excluded permanently.
 
 **Built:** browser `SpeechRecognition` (`zh-TW`) for hold-to-talk input and
 `speechSynthesis` for read-aloud at a slower rate. Unsupported browsers hide the
-control instead of showing a dead button.
+control instead of showing a dead button. The web medication-bag transcription
+draft is built; its confirmation-to-log handoff, LINE image intake, LINE voice
+STT, and general natural-language question understanding remain future work.
 
 ---
 
 ## 3. Structured logs
 
-**Built.** Every check appends a snapshot; observations are recorded in the
+**Built.** Each `/api/check` invocation builds one verdict, returns both
+caregiver and elder narration projections, and appends exactly one snapshot.
+The client switches between those already-returned projections locally, so a
+tab change does not write history again. Observations are recorded in the
 carer's words; the change between consecutive snapshots is computed rather than
-stored. `LogStore` selects `BlobLogStore` on Vercel when
-`BLOB_READ_WRITE_TOKEN` exists and `InMemoryLogStore` locally.
+stored. `LogStore` selects `BlobLogStore` whenever
+`BLOB_READ_WRITE_TOKEN` exists, including local development, and otherwise
+falls back to `InMemoryLogStore`.
 
 Blob makes browser and LINE survive serverless process boundaries, but it is a
 whole-document read-modify-write store: two concurrent writers can clobber one
@@ -265,8 +297,9 @@ Subject           the person; conditions[] drive the drug-condition criteria
 Carer
 CareRelationship  many-to-many — two siblings splitting appointments,
                   one carer holding twelve residents across a shift
-MedicationItem    inputText verbatim, source, resolved, ingredient, provenance
-Observation       kind: symptom | self_medication | alcohol | missed_dose
+MedicationItem    inputText verbatim, source (including unknown), resolved,
+                  ingredient, provenance
+Observation       kind: symptom | self_medication | alcohol | missed_dose | other
                   reportedByCarerId — never the subject
 RegimenSnapshot   change between consecutive snapshots is the signal
 ```
@@ -276,6 +309,12 @@ Two decisions in there matter more than the schema.
 **Observations are reported by carers, never by the subject.** The product never
 asks the older adult to confirm or deny anything, so a channel built on his
 admissions would collect silence.
+
+The current LINE implementation stores an elder's typed medicine-name question
+in the same observation collection as `kind: "other"` with the sentinel
+`reportedByCarerId: "elder-asked"`. This is a demo storage shortcut so the
+caregiver can retrieve recent questions; it is not a claim that the elder made
+an observation. A future schema should give questions their own entity.
 
 **The signal is the change, not the state.** What a department added, what
 quietly stopped, what nobody restarted after discharge. A single snapshot
@@ -407,12 +446,17 @@ Layered:
   byte-identical across runs.
 - **Narration** — the checks, each with an example that must be rejected, and
   the fallback across four verdict shapes × two audiences.
-- **Voice** — that no request is made without a key, that a profile cannot exist
-  without consent, and that a model is always private.
+- **Voice** — that no Fish request is made without a key, that the calibration
+  helper requires a consent statement and creates private models, and that the
+  outbound API rejects an unregistered request `voiceId` with HTTP 400.
 - **LINE adapter** — signature verification, idempotency, verbatim delivery,
   refusal to send a link to an older adult, fixed demo-pair role claims,
   caregiver routing, and QR image payloads. Network calls are mocked so the
   suite runs offline.
+- **Medication-bag transcription** — request size/type gates, tool-shaped
+  provider output, evidence/value agreement, rejected-field blanking, and the
+  always-review draft contract. The optional live photo test is skipped unless
+  both a key and an explicit image path are supplied.
 
 ### What the tests did not catch, and what that changed
 
@@ -441,7 +485,7 @@ support.
 ## 8. Privacy
 
 The grounding registers and rules are local committed files. In a configured
-demo deployment, health-related data can cross four explicit boundaries:
+demo deployment, health-related data can cross five explicit boundaries:
 
 - medication snapshots, observations, role bindings, audio, and QR assets are
   stored in the deployment's Vercel Blob store;
@@ -449,8 +493,16 @@ demo deployment, health-related data can cross four explicit boundaries:
   demo accounts;
 - Gemini receives a caregiver paragraph only when `GEMINI_API_KEY` is set, and
   its segmentation is checked as verbatim substrings before storage;
-- Fish Audio receives narration only when a consented voice profile and key are
-  configured. Browser speech remains on-device.
+- Anthropic receives the selected medication-bag image only when
+  `ANTHROPIC_API_KEY` is set. MedBuddy does not persist the image or provider
+  response, and excludes patient-identifying text from its output shape, but
+  the original photo can still contain identifiers visible to the provider;
+  this demo therefore requires synthetic/de-identified photos and explicit
+  review;
+- Fish Audio receives narration only when a registered voice profile and key
+  are configured. The committed Serin demo profile includes the repository's
+  consent record; an unregistered request id is rejected. Browser speech uses
+  browser APIs and MedBuddy sends it to no server of its own.
 
 Without the relevant key, that provider is not called and the code takes a
 deterministic/local fallback. The prototype has no user-facing consent or
@@ -466,13 +518,13 @@ than unrestricted register or log access. Observation extraction is a separate
 span-classification boundary and cannot add text that was absent from the
 caregiver's input.
 
-For a real deployment the decisions are named rather than solved: audio
-containing health information needs signed, short-lived URLs rather than public
-ones; a LINE userId is an identifier and must not become the primary key; and
-Taiwan's 個人資料保護法 treats medical data as sensitive, which constrains
-retention and cross-border processing. None of that is implemented, and a
-48-hour prototype claiming compliance would be the least credible thing in this
-document.
+LINE audio output already uses private Blob objects behind HMAC-signed,
+short-lived URLs. What remains unsolved for a real deployment is broader: user
+authentication and authorization, transactional data access, consent and
+retention administration, deletion/audit workflows, and review of cross-border
+processing. A LINE userId is an identifier and must not become the clinical
+record's primary key. Taiwan's 個人資料保護法 treats medical data as sensitive;
+this prototype does not claim production compliance.
 
 ---
 
@@ -501,13 +553,15 @@ arrive is recoverable. A wrong one is not.
 
 ## 10. What I would do next, in order
 
-1. **Persistence.** The missing requirement, and the keystone: it is what makes
-   LINE and the web view one record instead of two products.
-2. **The clinician page.** The output the whole product is pointed at.
-3. **Answer the question the elder asks** — the box records it; routing it back
-   through grounding is what makes the product conversational rather than
-   accessible.
-4. **Encode the rest of STOPP**, mechanical rather than conceptual, plus
-   START — what is missing matters as much as what should not be there.
-5. **Measure the false-positive rate**, because permissive matching without that
-   number is a claim rather than a design.
+1. **Authentication and operator-grade pairing.** Replace the fixed two-phone
+   allowlist with verified accounts, explicit relationships, and recovery.
+2. **Transactional persistence and lifecycle controls.** Move beyond Blob
+   read-modify-write and add retention, deletion, and audit workflows.
+3. **Complete the input gaps.** Add LINE voice STT and finish the medication-bag
+   draft handoff: correction, explicit confirmation, grounding, and only then a
+   log write. Add inbound LINE-image acquisition without moving OCR into the
+   transport adapter.
+4. **Carry timing and dose into the model.** Only then can reminders or
+   before/after-meal answers be implemented without inventing a schedule.
+5. **Encode more licensed criteria and measure false-positive rate at scale.**
+   Permissive matching without that number is a claim rather than a design.

@@ -56,15 +56,26 @@ const FURNITURE: Record<string, string> = {
     "拍藥袋請用這個網頁,可以直接開相機或從相簿選:\n\n" +
     "{{BASE}}/bag\n\n" +
     "系統只會照抄藥袋上印出來的字。沒印的欄位會留白,不會自己補 —— " +
-    "讀完的每一列都要您核對過才會存進紀錄。",
+    "讀完只是草稿,不會自動存進紀錄;請核對後回工作台輸入。",
 };
 
-export function furniture(key: keyof typeof FURNITURE | string): ActionReply {
+export function furniture(
+  key: keyof typeof FURNITURE | string,
+  webBaseUrl?: string,
+): ActionReply {
   const text = FURNITURE[key] ?? "";
-  // {{BASE}} rather than a hardcoded host: the same string has to work on a
-  // preview deployment, on localhost, and in production, and a link that
-  // silently points at the wrong deployment is worse than no link.
-  const base = process.env.NEXT_PUBLIC_BASE_URL?.trim().replace(/\/$/, "") ?? "";
+  if (!text.includes("{{BASE}}")) return { text, fromPipeline: false };
+
+  // The webhook injects the deployment origin that actually received the
+  // postback. An env URL may still name an older Vercel project, which would
+  // split the two LINE phones from the record they are meant to share.
+  const base = webBaseUrl?.trim().replace(/\/$/, "");
+  if (!base) {
+    return {
+      text: "拍藥袋網頁暫時無法開啟,請從照顧者工作台進入。",
+      fromPipeline: false,
+    };
+  }
   return { text: text.replace(/\{\{BASE\}\}/g, base), fromPipeline: false };
 }
 

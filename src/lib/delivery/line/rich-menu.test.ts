@@ -48,7 +48,7 @@ describe("the elder's menu", () => {
 });
 
 describe("the caregiver's menu", () => {
-  const menu = caregiverRichMenu("https://medbuddy-app.vercel.app");
+  const menu = caregiverRichMenu();
 
   it("gives four targets and tiles the menu", () => {
     // Was 2×3. 他問了什麼, 照顧對象 and 開啟網頁 came off: a subject switcher

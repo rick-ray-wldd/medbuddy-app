@@ -21,6 +21,8 @@ export default async function SharedSummaryPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+  // This route is force-dynamic: expiry must be checked at request time.
+  // eslint-disable-next-line react-hooks/purity
   const result = verifyShareToken(decodeURIComponent(token), Date.now());
 
   if (!result.valid) {

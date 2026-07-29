@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
     usedFallback: false,
   })),
   send: vi.fn(async () => ({ ok: true as const })),
+  findDemoVoice: vi.fn(() => null),
 }));
 
 vi.mock("@/lib/registry", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/lib/narration/narrate", () => ({ narrate: mocks.narrate }));
 vi.mock("@/lib/voice/fish", () => ({ FishVoiceProvider: class {} }));
 vi.mock("@/lib/voice/profiles", () => ({
   defaultVoice: () => null,
-  findDemoVoice: () => null,
+  findDemoVoice: mocks.findDemoVoice,
 }));
 vi.mock("@/lib/delivery/line/config", () => ({
   getLineConfig: () => ({ channelAccessToken: "test-token" }),
@@ -40,6 +41,7 @@ describe("POST /api/line/deliver", () => {
     vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
     mocks.narrate.mockClear();
     mocks.send.mockClear();
+    mocks.findDemoVoice.mockClear();
   });
 
   afterEach(() => {
@@ -70,5 +72,23 @@ describe("POST /api/line/deliver", () => {
       expect.objectContaining({ channelUserId: "U-father", role: "elder" }),
       { text: "長者版說明" },
     );
+  });
+
+  it("rejects an unregistered per-request voice instead of inventing consent", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/line/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId: "subj-father",
+          items: [{ text: "普拿疼膜衣錠500毫克", source: "otc" }],
+          voiceId: "unregistered-voice",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "unknown or unconsented voice profile" });
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 });

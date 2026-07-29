@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getRegistry } from "@/lib/registry";
 import { findSubject } from "@/lib/subjects";
 import { NoHistory, SummarySheet } from "./sheet";
@@ -31,10 +32,10 @@ export default async function SummaryPage({
     <>
       <SummarySheet subject={subject} verdict={latest.verdict} log={log} />
       <div className="mx-auto max-w-2xl px-6 pb-12 print:hidden">
-        <ShareButton subjectId={subject.id} subjectName={subject.displayName} />
-        <a className="mt-6 inline-block underline" href="/">
+        <ShareButton subjectId={subject.id} />
+        <Link className="mt-6 inline-block underline" href="/">
           ← 回到核對
-        </a>
+        </Link>
       </div>
     </>
   );

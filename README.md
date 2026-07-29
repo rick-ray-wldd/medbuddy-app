@@ -33,7 +33,11 @@ Also available: `npm run typecheck`, `npm run build`.
 ## How it is put together
 
 ```
-input (photo | text | speech)
+caregiver LINE  ↔  shared RoleStore / LogStore  ↔  elder LINE
+                              ↕
+                    caregiver web dashboard
+
+typed text | browser speech
       ↓
 grounding/   resolve free text to known drugs / supplements / ingredients
       ↓      unresolved is a first-class result, never a guess
@@ -43,7 +47,24 @@ verdict/     the single object carrying every clinical judgement
       ↓
 narration/   translate a verdict into plain language —
              receives ONLY the verdict; cannot query the registers
+
+medication-bag photo
+      ↓
+Claude transcription → evidence validator → review-only draft
+                                             ↛ medication log
 ```
+
+The review demo is intentionally one fixed care pair: two configured LINE
+accounts, one `subj-father` record, and role-specific 2×2 rich menus. The web
+page is the observable hub: it shows link state and shared-log activity without
+returning either opaque LINE user ID to the browser. Runtime links use the
+origin that received the webhook, so an old local Vercel link cannot silently
+send one phone to another project.
+
+Medication-bag transcription is a safe first slice, not an autonomous import.
+It copies visible fields with evidence and explicit blanks; correction,
+confirmation, grounding, and promotion into the longitudinal record are still
+required future work.
 
 **Clinical judgement ends at the verdict object.** The verdict carries the
 register fields narration needs to say what a medicine is for, but narration
@@ -65,6 +86,7 @@ change to a medication-safety rule is diffable and reviewable.
 | [`docs/LINE-UX-SPEC.md`](./docs/LINE-UX-SPEC.md) | What the two people see and can touch in LINE, and what the bot must never do |
 | [`docs/ELDER-MENU-ARCHITECTURE.md`](./docs/ELDER-MENU-ARCHITECTURE.md) | The older adult's four buttons: what each is architecturally, and what is still missing from each |
 | [`docs/VOICE-DELIVERY-SPEC.md`](./docs/VOICE-DELIVERY-SPEC.md) | Whose voice speaks, under what consent, and why a persona never changes the words |
+| [`docs/MEDICATION-BAG-OCR-MIGRATION.md`](./docs/MEDICATION-BAG-OCR-MIGRATION.md) | Evidence-only OCR contract, implemented web draft, and the remaining confirmation/LINE migration |
 | [`src/lib/README.md`](./src/lib/README.md) | Module seams |
 | [`NOTES.md`](./NOTES.md) | Build log — what broke, what the AI wrote and what I rejected |
 

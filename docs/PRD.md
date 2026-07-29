@@ -24,6 +24,12 @@ subject switcher. The two deployment recipients are configured as
 `LINE_DEMO_ELDER_USER_ID` and `LINE_DEMO_CAREGIVER_USER_ID`; when both are set,
 a third LINE account cannot claim either role.
 
+The web hub status is a read-only projection of that same pair and shared log;
+it exposes link states and activity counts, never the opaque LINE User IDs, and
+is not a separate clinical database. One `/api/check` request appends exactly
+one snapshot and returns both caregiver and elder narrations, so changing the
+preview tab does not write another history entry.
+
 This is a scope decision, not a claim that caregiving is one-to-one. Multi-elder,
 multi-caregiver, facility rosters, self-service pairing, and role administration
 remain the target model after the challenge. They are intentionally excluded
@@ -136,7 +142,7 @@ work, badly, in their head.
 
 | What they do today | In MedBuddy |
 | --- | --- |
-| Keep the list in their head | Photograph or type what is on the living-room table |
+| Keep the list in their head | Type or dictate what is on the living-room table |
 | Notice things and forget them | Record an observation when it happens |
 | Realise at the appointment they cannot remember | Bring one page |
 | Say the difficult parts out loud in front of their parent | Hand over a sheet |
@@ -144,6 +150,18 @@ work, badly, in their head.
 **Built:** a fixed-subject medical dashboard, free-text intake with a source per line
 (prescription / over the counter / leftover / supplement), the check, findings
 with the quoted source and its stated limits, coverage, provenance.
+
+**Built as a safe draft, not as a medication record:** `/bag` lets the caregiver
+take or select a medication-bag photo. Claude Sonnet transcribes visible fields
+with an evidence quote and explicit missing/partial/conflicting states; a local
+validator blanks unsupported claims. The image and draft are not persisted.
+The caregiver LINE `紀錄用藥` action links to this page on the deployment that
+received the webhook.
+
+**Not built:** correction/confirmation that promotes that draft into the typed
+medication list or longitudinal log, and OCR from an inbound LINE image. Until
+that handoff exists, formal medication checks still start from typed text or
+browser dictation and require a stated source.
 
 ### 3.2 The older adult — speaks to ask, never to answer
 
@@ -167,8 +185,9 @@ asking him to admit anything.
 in LINE, a bound elder can type a medicine name and receive a grounded elder
 narration. The elder rich menu contains no adherence confirmation control.
 
-**Not built:** speech-to-text for an inbound LINE voice message. Audio input is
-recorded and deliberately not answered rather than guessed.
+**Not built:** speech-to-text for an inbound LINE voice message. The webhook
+downloads the audio bytes, logs message metadata only, and then discards the
+bytes; it deliberately sends no answer rather than guessing.
 
 ### 3.3 The clinician — a page, not a channel
 
@@ -248,16 +267,18 @@ It raises questions. It does not answer them.
 
 | Required by the brief | State |
 | --- | --- |
-| Voice-friendly **or highly accessible chat** interaction | **Partial but runnable.** Browser hold-to-talk and read-aloud are built; LINE text questions are grounded and answered; LINE voice input is recorded but has no STT, so it receives no guessed answer. |
+| Voice-friendly **or highly accessible chat** interaction | **Partial but runnable.** Browser hold-to-talk and read-aloud are built; a LINE elder can type one medicine name and receive a grounded explanation. A caregiver can open a web medication-bag transcription draft from LINE. General natural-language questions and LINE voice STT are not built; inbound audio is discarded after metadata logging and receives no guessed answer. |
 | Explains purpose, timing and interactions with grounded data and clear limits | **Purpose and interactions built; timing is not.** The register's dosing text is not carried into the item model. This is still the strongest of the four. |
-| Structured medication / symptom / adherence log over time | **Built for the demo.** Snapshots and observations use Vercel Blob when configured and memory locally. Blob is adequate for one sequential care pair, not concurrent facility writes; Postgres is the production migration. |
+| Structured medication / symptom / adherence log over time | **Built for the demo.** Snapshots and observations use Vercel Blob whenever `BLOB_READ_WRITE_TOKEN` is configured, including local development; otherwise they fall back to process memory. Blob is adequate for one sequential care pair, not concurrent facility writes; Postgres is the production migration. |
 | Clinician- or caregiver-reviewable summary, escalating rather than deciding | **Built.** `/summary/[subjectId]` renders the page a family hands over; escalation is a two-value enumeration checked when rule sets load. |
 
 The LINE delivery adapter is **implemented and offline-tested**
 (`src/lib/delivery/line/**`): webhook signature verification, deduplication,
-role binding, per-user rich menus, elder text questions, caregiver observations,
-caregiver-initiated elder delivery, signed audio delivery, and clinician-summary
-QR images. Browser and LINE write to the same `LogStore`.
+role binding, per-user rich menus, elder medicine-name messages, caregiver
+observations, caregiver-initiated elder delivery, optional signed audio, and
+clinician-summary QR image payloads. Browser and LINE write to the same
+`LogStore`. These are code-level, offline-tested capabilities; production LINE
+delivery still depends on the deployment variables and live channel setup.
 
 What remains before a real rollout is authentication, transactional persistence,
 consent/retention policy, STT for LINE voice input, and an operator-grade pairing
@@ -281,10 +302,12 @@ concurrent writes and cross-instance role consistency require a database.
    discharge is the highest-risk handoff in the whole system and the one where a
    family is least equipped.
 3. **Family → facility.** The engine transfers. What does not transfer is the
-   moat: a grandson's voice is why a technology-averse older adult engages at
-   all, and a facility has no grandson. Facility value is continuity across
-   shifts and a defensible record — a different pitch, a different buyer, the
-   same rules and registers underneath.
+   potential familiar-voice advantage: a consenting caregiver's voice may help
+   a technology-averse older adult engage, while a facility has no equivalent
+   family relationship. The current demo's optional Serin voice is only a
+   consented stand-in, not the elder's relative. Facility value is continuity
+   across shifts and a defensible record — a different pitch, a different
+   buyer, the same rules and registers underneath.
 4. **Taiwan → elsewhere.** Rule sets are files, and the engine interprets
    shapes rather than holding medication knowledge, so a new criteria set is a
    new file. A new *register* is more than that: the two TFDA shapes are typed

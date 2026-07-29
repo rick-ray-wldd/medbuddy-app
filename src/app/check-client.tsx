@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import Link from "next/link";
 import type { SeededSubject } from "@/lib/subjects";
 import type { Verdict } from "@/lib/verdict/types";
 import type { Narration, NarrationAudience } from "@/lib/narration/types";
@@ -15,7 +16,10 @@ const SOURCE_LABELS: Record<ItemSource, string> = {
   unknown: "不確定",
 };
 
-type CheckResponse = { verdict: Verdict; narration: Narration };
+type CheckResponse = {
+  verdict: Verdict;
+  narrations: Record<NarrationAudience, Narration>;
+};
 
 function toLines(subject: SeededSubject): string {
   return subject.cupboard.map((item) => `${item.text} | ${item.source}`).join("\n");
@@ -41,8 +45,14 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
   const [result, setResult] = useState<CheckResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
+  const checkLock = useRef(false);
 
-  async function run(next: NarrationAudience = audience) {
+  async function run() {
+    if (checkLock.current) return;
+    checkLock.current = true;
+    const version = ++requestVersion.current;
+    const submittedText = text;
     setBusy(true);
     setError(null);
     try {
@@ -51,32 +61,38 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subjectId: subject.id,
-          items: parseLines(text),
-          audience: next,
+          items: parseLines(submittedText),
         }),
       });
       if (!response.ok) throw new Error(`伺服器回應 ${response.status}`);
-      setResult(await response.json());
+      const nextResult = (await response.json()) as CheckResponse;
+      if (version !== requestVersion.current) return;
+      setResult(nextResult);
     } catch (cause) {
+      if (version !== requestVersion.current) return;
       setError(cause instanceof Error ? cause.message : "核對失敗");
       setResult(null);
     } finally {
-      setBusy(false);
+      checkLock.current = false;
+      if (version === requestVersion.current) setBusy(false);
     }
   }
 
   function changeAudience(next: NarrationAudience) {
-    if (next === audience || busy) return;
+    if (next === audience) return;
     setAudience(next);
-    void run(next);
   }
 
   function replaceMedicationText(next: string) {
+    requestVersion.current += 1;
+    setBusy(false);
     setText(next);
     setResult(null);
   }
 
   function appendMedicationText(said: string) {
+    requestVersion.current += 1;
+    setBusy(false);
     setText((current) => (current ? `${current}\n${said}` : said));
     setResult(null);
   }
@@ -112,6 +128,7 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
             id="cupboard"
             value={text}
             onChange={(event) => replaceMedicationText(event.target.value)}
+            disabled={busy}
             rows={7}
             spellCheck={false}
             className="medication-input"
@@ -121,10 +138,15 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
             範例：普拿疼膜衣錠500毫克 | otc
           </p>
           <div className="card-actions">
-            <DictateButton
-              label="按住唸出品名"
-              onText={appendMedicationText}
-            />
+            <Link href="/bag" className="secondary-action">
+              拍藥袋建立草稿
+            </Link>
+            <fieldset disabled={busy} className="contents">
+              <DictateButton
+                label="按住唸出品名"
+                onText={appendMedicationText}
+              />
+            </fieldset>
             <button
               type="button"
               onClick={() => void run()}
@@ -147,7 +169,7 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
               busy={busy}
               onAudience={changeAudience}
             />
-            {audience === "caregiver" ? <Observe subjectId={subject.id} /> : null}
+            <Observe subjectId={subject.id} />
             <Handoff subjectId={subject.id} itemsText={text} />
           </>
         ) : null}
@@ -219,8 +241,11 @@ function Handoff({ subjectId, itemsText }: { subjectId: string; itemsText: strin
 function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: string }) {
   const [state, setState] = useState<"idle" | "busy" | "sent" | "failed">("idle");
   const [reason, setReason] = useState<string | null>(null);
+  const sendLock = useRef(false);
 
   async function send() {
+    if (sendLock.current || state === "sent") return;
+    sendLock.current = true;
     setState("busy");
     setReason(null);
     try {
@@ -238,10 +263,12 @@ function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: st
       if (response.ok && data.delivery?.ok) {
         setState("sent");
       } else {
+        sendLock.current = false;
         setState("failed");
         setReason(data.delivery?.reason ?? `伺服器回應 ${response.status}`);
       }
     } catch {
+      sendLock.current = false;
       setState("failed");
       setReason("連線失敗");
     }
@@ -252,7 +279,7 @@ function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: st
       <button
         type="button"
         onClick={() => void send()}
-        disabled={state === "busy"}
+        disabled={state === "busy" || state === "sent"}
         className="primary-action"
       >
         {state === "busy"
@@ -273,10 +300,13 @@ function Observe({ subjectId }: { subjectId: string }) {
   const [kind, setKind] = useState("symptom");
   const [state, setState] = useState<"idle" | "busy" | "saved" | "failed">("idle");
   const [saved, setSaved] = useState<string | null>(null);
+  const saveLock = useRef(false);
 
   async function save() {
+    if (saveLock.current) return;
     const trimmed = note.trim();
     if (!trimmed) return;
+    saveLock.current = true;
     setState("busy");
     const response = await fetch("/api/observation", {
       method: "POST",
@@ -291,6 +321,7 @@ function Observe({ subjectId }: { subjectId: string }) {
     } else {
       setState("failed");
     }
+    saveLock.current = false;
   }
 
   return (
@@ -310,6 +341,7 @@ function Observe({ subjectId }: { subjectId: string }) {
           id="observation-kind"
           value={kind}
           onChange={(event) => setKind(event.target.value)}
+          disabled={state === "busy"}
           className="form-control"
         >
           <option value="symptom">症狀</option>
@@ -323,8 +355,9 @@ function Observe({ subjectId }: { subjectId: string }) {
           id="observation-note"
           value={note}
           onChange={(event) => setNote(event.target.value)}
+          disabled={state === "busy"}
           onKeyDown={(event) => {
-            if (event.key === "Enter") void save();
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) void save();
           }}
           placeholder="例如：晚上腰痛，自己拿了櫃子裡的止痛藥"
           className="form-control note-input"
@@ -360,7 +393,13 @@ function Result({
   busy: boolean;
   onAudience: (audience: NarrationAudience) => void;
 }) {
-  const { verdict, narration } = data;
+  const { verdict } = data;
+  const narration = data.narrations[audience];
+
+  function selectTab(next: NarrationAudience) {
+    onAudience(next);
+    requestAnimationFrame(() => document.getElementById(`result-tab-${next}`)?.focus());
+  }
 
   return (
     <section className="medical-card" aria-labelledby="result-heading">
@@ -383,8 +422,21 @@ function Result({
               aria-controls="result-panel"
               id={`result-tab-${next}`}
               key={next}
+              tabIndex={next === audience ? 0 : -1}
               disabled={busy}
               onClick={() => onAudience(next)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                  event.preventDefault();
+                  selectTab(next === "caregiver" ? "elder" : "caregiver");
+                } else if (event.key === "Home") {
+                  event.preventDefault();
+                  selectTab("caregiver");
+                } else if (event.key === "End") {
+                  event.preventDefault();
+                  selectTab("elder");
+                }
+              }}
             >
               {next === "caregiver" ? "照顧者詳細版" : "長者 LINE 預覽"}
             </button>

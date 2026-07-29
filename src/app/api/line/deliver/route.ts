@@ -110,21 +110,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   // A named voice wins; otherwise the deployment's configured one, which is
   // absent unless MEDBUDDY_DEMO_VOICE_ID is set. No voice → no synthesis → no
   // request leaves the process.
-  const profile = body.voiceId
-    ? (findDemoVoice(body.voiceId) ?? {
-        id: `fish:${body.voiceId}`,
-        subjectId: subject.id,
-        displayName: subject.displayName,
-        provider: "fish" as const,
-        externalVoiceId: body.voiceId,
-        createdAt: "",
-        consent: {
-          statement:
-            "Supplied per-request; this repository holds no consent record for it.",
-          givenAt: "",
-        },
-      })
-    : defaultVoice();
+  const profile = body.voiceId ? findDemoVoice(body.voiceId) : defaultVoice();
+
+  // A provider voice id is not proof of consent. Only profiles registered in
+  // the server-side demo catalogue may be requested by the browser.
+  if (body.voiceId && !profile) {
+    return NextResponse.json(
+      { error: "unknown or unconsented voice profile" },
+      { status: 400 },
+    );
+  }
 
   if (profile) {
     const synthesis = await new FishVoiceProvider().synthesise({

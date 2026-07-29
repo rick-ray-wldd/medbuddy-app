@@ -19,10 +19,8 @@ type Share = { url: string; qrDataUrl: string; subjectName: string };
  */
 export default function ShareButton({
   subjectId,
-  subjectName,
 }: {
   subjectId: string;
-  subjectName: string;
 }) {
   const [share, setShare] = useState<Share | null>(null);
   const [busy, setBusy] = useState(false);

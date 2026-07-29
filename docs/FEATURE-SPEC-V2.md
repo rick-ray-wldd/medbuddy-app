@@ -148,7 +148,7 @@ demo 部署設 true。
 
 **目的:** 照顧者拍藥袋照片 → 辨識藥品 → 寫進長輩的「我的藥」。
 
-**現況:** 契約寫在 `docs/MEDICATION-BAG-OCR-MIGRATION.md`(557 行),**未實作**。webhook 目前直接丟棄 `image` 訊息。
+**現況:** Web-only 安全切片已實作：`/bag` 拍照或選圖，Claude 只轉錄可見文字，輸出 evidence 與缺漏狀態，並由本機 validator 拒絕無原文支持的欄位。結果永遠是未持久化草稿。LINE image webhook、逐欄修正／確認、grounding 與寫入 snapshot 仍未實作。
 
 **要做的:**
 
@@ -331,7 +331,7 @@ LINE_CHANNEL_SECRET=
 BLOB_READ_WRITE_TOKEN=
 GEMINI_API_KEY=
 SUMMARY_SHARE_SECRET=
-NEXT_PUBLIC_BASE_URL=
+ANTHROPIC_API_KEY=        # 只有 Web 藥袋草稿轉錄需要
 FISH_AUDIO_API_KEY=        # 只有預先產生語音時需要,runtime 不需要
 ```
 

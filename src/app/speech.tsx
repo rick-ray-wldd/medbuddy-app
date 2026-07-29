@@ -4,16 +4,21 @@
  * Speech in and out, on the device.
  *
  * The browser's own recognition and synthesis are the default because nothing
- * leaves: no key, no account, no third party, and it works with the network
- * off. A cloned caregiver voice is better at getting a technology-averse older
- * adult to engage, and it is opt-in precisely because it sends the text
- * somewhere.
+ * is sent to a MedBuddy speech service: no app key and no app account. Browser
+ * implementations may still use their own provider or require a network. A
+ * cloned caregiver voice is opt-in precisely because it sends text elsewhere.
  *
  * Both degrade to nothing rather than to a broken control: a browser without
  * these APIs simply does not show the button.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -35,6 +40,18 @@ function recognitionConstructor(): (new () => SpeechRecognitionLike) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+function subscribeToStaticCapability(): () => void {
+  return () => undefined;
+}
+
+function recognitionIsSupported(): boolean {
+  return recognitionConstructor() !== null;
+}
+
+function speechSynthesisIsSupported(): boolean {
+  return typeof window !== "undefined" && "speechSynthesis" in window;
+}
+
 /**
  * Hold to speak.
  *
@@ -49,14 +66,13 @@ export function DictateButton({
   onText: (text: string) => void;
   label?: string;
 }) {
-  const [supported, setSupported] = useState(false);
+  const supported = useSyncExternalStore(
+    subscribeToStaticCapability,
+    recognitionIsSupported,
+    () => false,
+  );
   const [listening, setListening] = useState(false);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
-
-  useEffect(() => {
-    const Ctor = recognitionConstructor();
-    setSupported(Ctor !== null);
-  }, []);
 
   const start = useCallback(() => {
     const Ctor = recognitionConstructor();
@@ -112,11 +128,14 @@ export function DictateButton({
  * rather than reading, and the default rate is tuned for people who are not.
  */
 export function SpeakButton({ text, label = "唸給我聽" }: { text: string; label?: string }) {
-  const [supported, setSupported] = useState(false);
+  const supported = useSyncExternalStore(
+    subscribeToStaticCapability,
+    speechSynthesisIsSupported,
+    () => false,
+  );
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
-    setSupported(typeof window !== "undefined" && "speechSynthesis" in window);
     return () => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();

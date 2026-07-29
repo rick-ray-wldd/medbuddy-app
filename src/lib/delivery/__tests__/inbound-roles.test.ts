@@ -454,7 +454,7 @@ describe("actions the two menus now carry", () => {
   });
 
   it("紀錄用藥 points the caregiver at the camera page", async () => {
-    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "https://medbuddy-app.vercel.app");
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "https://stale-personal-project.vercel.app");
     const { delivery, calls } = fakeDelivery();
     const { setup } = fakeSetup();
     await store.put({
@@ -468,12 +468,14 @@ describe("actions the two menus now carry", () => {
       roleStore: store,
       delivery,
       setup,
+      webBaseUrl: "https://current-medbuddy.vercel.app",
     });
 
     expect(calls).toHaveLength(1);
     const text = calls[0].message.text;
     // A link is allowed here and forbidden to the elder — §6.1 is about him.
-    expect(text).toContain("https://medbuddy-app.vercel.app/bag");
+    expect(text).toContain("https://current-medbuddy.vercel.app/bag");
+    expect(text).not.toContain("stale-personal-project");
     // The placeholder must never reach a person.
     expect(text).not.toContain("{{BASE}}");
     // States the limit rather than promising a clean read.

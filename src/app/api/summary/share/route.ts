@@ -18,9 +18,10 @@ import { findSubject } from "@/lib/subjects";
 import { createShareToken, shareUrl } from "@/lib/summary/share-token";
 
 function summaryBase(request: Request): string {
-  const configured = process.env.NEXT_PUBLIC_BASE_URL?.trim();
-  const origin = configured || new URL(request.url).origin;
-  return `${origin.replace(/\/$/, "")}/summary`;
+  // Use the deployment that received this request. A local Vercel link can be
+  // stale and point at another project; it must not decide where health data
+  // links lead at runtime.
+  return `${new URL(request.url).origin}/summary`;
 }
 
 export async function POST(request: Request) {

@@ -16,6 +16,7 @@
  */
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 
 type Field = {
   value: string | null;
@@ -168,7 +169,7 @@ export function BagClient({ subjectId }: { subjectId: string }) {
           <div className="rounded-lg bg-amber-50 border border-amber-300 px-4 py-3">
             <p className="font-medium text-amber-900">這是讀出來的草稿,還不是紀錄。</p>
             <p className="text-sm text-amber-900 mt-1">
-              每一列都要您核對過才會存進用藥紀錄。系統只照抄看得見的字,不會補上沒印出來的東西。
+              這一版不會自動寫入用藥紀錄。請逐列對照手上的藥袋,再回工作台輸入已確認的藥名。系統只照抄看得見的字,不會補上沒印出來的東西。
             </p>
             {extraction.reviewReasons.length > 0 && (
               <ul className="mt-2 text-sm text-amber-900 list-disc pl-5">
@@ -219,6 +220,10 @@ export function BagClient({ subjectId }: { subjectId: string }) {
               這張照片上有姓名之類的個人資料。系統沒有讀取、也沒有儲存那些欄位。
             </p>
           )}
+
+          <Link href="/" className="inline-flex rounded-lg bg-teal-700 px-5 py-3 font-medium text-white">
+            回工作台手動核對
+          </Link>
         </div>
       )}
     </div>

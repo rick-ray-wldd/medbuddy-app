@@ -11,12 +11,10 @@ import { buildVerdict } from "@/lib/verdict/build";
 import { narrate } from "@/lib/narration/narrate";
 import { findSubject } from "@/lib/subjects";
 import type { ItemSource } from "@/lib/grounding/types";
-import type { NarrationAudience } from "@/lib/narration/types";
 
 type Body = {
   subjectId?: string;
   items?: { text: string; source?: ItemSource }[];
-  audience?: NarrationAudience;
 };
 
 export async function POST(request: Request) {
@@ -33,7 +31,6 @@ export async function POST(request: Request) {
   }
 
   const submitted = (body.items ?? []).filter((i) => i.text.trim().length > 0);
-  const audience: NarrationAudience = body.audience === "elder" ? "elder" : "caregiver";
 
   const { resolver, ruleSets, classes, knownMedicines, logStore } = getRegistry();
 
@@ -52,7 +49,14 @@ export async function POST(request: Request) {
   // No model is wired up in this build, so narration is the deterministic
   // route. The seam is here: pass a Narrator and its output is validated
   // against the verdict before it is returned, and rejected if it deviates.
-  const outcome = await narrate(verdict, audience, null, knownMedicines);
+  // A check creates one clinical fact and two read-only projections of it.
+  // Returning both means switching the dashboard preview cannot accidentally
+  // append another regimen snapshot or briefly mislabel one audience's prose
+  // as the other's while a second request is in flight.
+  const [caregiverOutcome, elderOutcome] = await Promise.all([
+    narrate(verdict, "caregiver", null, knownMedicines),
+    narrate(verdict, "elder", null, knownMedicines),
+  ]);
 
   // Every check becomes a point in the record. The signal a clinician can use
   // is the change between captures, and there is no change without a history.
@@ -68,13 +72,25 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     verdict,
-    narration: outcome.narration,
+    narrations: {
+      caregiver: caregiverOutcome.narration,
+      elder: elderOutcome.narration,
+    },
     // Carried out to the surface rather than kept internal. A review found the
     // route dropping these while the design document claimed they were
     // reported — which made a documented failure mode false at the only place
     // anyone could observe it.
-    narrationFallback: outcome.usedFallback,
-    narrationRejected: outcome.rejected ?? null,
-    fallbackViolations: outcome.fallbackViolations ?? null,
+    narrationMeta: {
+      caregiver: {
+        fallback: caregiverOutcome.usedFallback,
+        rejected: caregiverOutcome.rejected ?? null,
+        fallbackViolations: caregiverOutcome.fallbackViolations ?? null,
+      },
+      elder: {
+        fallback: elderOutcome.usedFallback,
+        rejected: elderOutcome.rejected ?? null,
+        fallbackViolations: elderOutcome.fallbackViolations ?? null,
+      },
+    },
   });
 }

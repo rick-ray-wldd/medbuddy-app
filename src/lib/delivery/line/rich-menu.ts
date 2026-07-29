@@ -144,16 +144,13 @@ export function elderRichMenu(): RichMenuDefinition {
   };
 }
 
-export function caregiverRichMenu(baseUrl: string): RichMenuDefinition {
-  const cells = CAREGIVER_CELLS.map((c) =>
-    c.uri !== undefined ? { ...c, uri: `${baseUrl.replace(/\/$/, "")}/` } : c,
-  );
+export function caregiverRichMenu(): RichMenuDefinition {
   return {
     size: FULL,
     selected: true,
     name: "medbuddy-caregiver",
     chatBarText: "照顧工具",
-    areas: grid(cells, 2, 2),
+    areas: grid(CAREGIVER_CELLS, 2, 2),
   };
 }
 

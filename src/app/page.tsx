@@ -1,13 +1,54 @@
-import { CONDITION_LABELS, DEMO_SUBJECT } from "@/lib/subjects";
+import { CONDITION_LABELS, DEMO_SUBJECT, DEMO_SUBJECT_ID } from "@/lib/subjects";
 import { getRegistry } from "@/lib/registry";
+import {
+  getDemoLinePair,
+  type DemoLinePair,
+} from "@/lib/delivery/line/demo-pair";
+import { loadHubStatus, type ChannelLinkState } from "@/lib/hub/status";
 import CheckClient from "./check-client";
+
+export const dynamic = "force-dynamic";
+
+const LINK_LABELS: Record<ChannelLinkState, string> = {
+  linked: "已綁定",
+  awaiting_role: "待在 LINE 選擇角色",
+  not_configured: "尚未設定帳號",
+  mismatch: "角色配對異常",
+  unavailable: "暫時無法讀取",
+};
+
+function safeDemoPair(): { pair: DemoLinePair; configurationError: boolean } {
+  try {
+    return { pair: getDemoLinePair(), configurationError: false };
+  } catch {
+    return {
+      pair: {
+        subjectId: DEMO_SUBJECT_ID,
+        elderUserId: null,
+        caregiverUserId: null,
+      },
+      configurationError: true,
+    };
+  }
+}
+
+function displayActivity(at: string | null): string {
+  if (!at) return "尚無紀錄";
+  return new Intl.DateTimeFormat("zh-TW", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Taipei",
+  }).format(new Date(at));
+}
 
 /**
  * The whole product on one page: whose medicines these are, what is actually
  * in the cupboard, and what the registers and the criteria make of it.
  */
-export default function Home() {
-  const { registers, ruleSets } = getRegistry();
+export default async function Home() {
+  const { registers, ruleSets, logStore, roleStore } = getRegistry();
+  const { pair, configurationError } = safeDemoPair();
+  const hub = await loadHubStatus(pair, roleStore, logStore);
 
   const stats = {
     drugs: registers.drugs.drugs.length,
@@ -66,6 +107,10 @@ export default function Home() {
               <div>
                 <strong>長者手機</strong>
                 <span>選「我是長輩」後，自動綁定父親</span>
+                <span className="link-state" data-state={configurationError ? "mismatch" : hub.elder}>
+                  <span className="link-state-dot" aria-hidden="true" />
+                  {configurationError ? "配對環境變數不完整" : LINK_LABELS[hub.elder]}
+                </span>
               </div>
             </div>
             <div className="phone-role">
@@ -73,10 +118,55 @@ export default function Home() {
               <div>
                 <strong>照顧者手機</strong>
                 <span>選「我是照顧者」後，自動記錄照顧觀察</span>
+                <span className="link-state" data-state={configurationError ? "mismatch" : hub.caregiver}>
+                  <span className="link-state-dot" aria-hidden="true" />
+                  {configurationError ? "配對環境變數不完整" : LINK_LABELS[hub.caregiver]}
+                </span>
               </div>
             </div>
           </div>
           <p className="pairing-note">本次 Demo 固定 1 位長者 + 1 位照顧者，不提供切換對象。</p>
+        </div>
+      </section>
+
+      <section className="hub-card" aria-labelledby="hub-heading">
+        <div className="hub-heading">
+          <div>
+            <p className="eyebrow">SHARED CARE HUB</p>
+            <h2 id="hub-heading">兩支 LINE 手機，共用一份照護紀錄</h2>
+            <p>照顧者輸入與長者詢問都固定落在父親的紀錄；網頁負責核對、追蹤與交接。</p>
+          </div>
+          <form method="get" action="/">
+            <button type="submit" className="hub-refresh">重新讀取狀態</button>
+          </form>
+        </div>
+
+        <div className="hub-flow" aria-label="照顧者 LINE、共享紀錄與長者 LINE 的資料流">
+          <div className="hub-node">
+            <span className="hub-node-kicker">INPUT</span>
+            <strong>照顧者 LINE</strong>
+            <span>記錄症狀、漏服與自行用藥</span>
+          </div>
+          <span className="hub-arrow" aria-hidden="true">↔</span>
+          <div className="hub-node hub-node-primary">
+            <span className="hub-node-kicker">ONE SHARED RECORD</span>
+            <strong>{DEMO_SUBJECT.displayName}的照護資料</strong>
+            <span>{hub.snapshotCount} 次用藥核對 · {hub.observationCount} 筆照顧觀察</span>
+          </div>
+          <span className="hub-arrow" aria-hidden="true">↔</span>
+          <div className="hub-node">
+            <span className="hub-node-kicker">OUTPUT</span>
+            <strong>長者 LINE</strong>
+            <span>接收簡明說明、語音與回診摘要 QR</span>
+          </div>
+        </div>
+
+        <div className="hub-footnote">
+          <span className="link-state" data-state={hub.sharedRecord === "ready" ? "linked" : "unavailable"}>
+            <span className="link-state-dot" aria-hidden="true" />
+            {hub.sharedRecord === "ready" ? "共享紀錄可讀取" : "共享紀錄暫時無法讀取"}
+          </span>
+          <span>最後活動：{displayActivity(hub.lastActivityAt)}</span>
         </div>
       </section>
 

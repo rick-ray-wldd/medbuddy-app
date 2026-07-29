@@ -33,6 +33,7 @@ import {
   hasExplicitDemoPair,
   recipientForDemoRole,
 } from "./line/demo-pair";
+import type { SummaryQrDeliveryResult } from "../summary/deliver-qr-to-line";
 
 export type InboundMessage = {
   channelUserId: string;
@@ -95,6 +96,15 @@ export type InboundDeps = {
     pushFlex(userId: string, message: unknown): Promise<{ ok: boolean }>;
     linkRichMenu(userId: string, richMenuId: string): Promise<{ ok: boolean }>;
   };
+  /**
+   * In-process clinician-summary delivery. The HTTP transport composes this
+   * with the current deployment origin; inbound never calls its own API URL.
+   */
+  summaryQrDelivery?: (
+    subjectId: string,
+  ) => Promise<SummaryQrDeliveryResult>;
+  /** Origin of the deployment that received the webhook; never a stale env URL. */
+  webBaseUrl?: string;
 };
 
 /**
@@ -354,7 +364,7 @@ async function handlePostback(
       reply = await actions.dosingSchedule(subjectId);
       break;
     case "log_meds":
-      reply = actions.furniture("log_meds_prompt");
+      reply = actions.furniture("log_meds_prompt", deps.webBaseUrl);
       break;
     case "reach_family":
       return await reachFamily(channelUserId, subjectId, deps);
@@ -518,20 +528,23 @@ async function reachFamily(
   await push(channelUserId, "elder", subjectId, ack.text, deps);
 }
 
-/** Builds the clinician summary QR and sends it to the elder as an image. */
+/** Builds the clinician summary QR and delivers the role-safe demo-pair copies. */
 async function sendSummaryQr(subjectId: string, deps: InboundDeps): Promise<void> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL;
-  if (!base) {
-    console.error("[medbuddy] NEXT_PUBLIC_BASE_URL unset — cannot mint share QR");
+  if (!deps.summaryQrDelivery) {
+    console.error("[medbuddy] summary QR delivery is not configured");
     return;
   }
-  const res = await fetch(`${base.replace(/\/$/, "")}/api/summary/share/to-line`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subjectId }),
-  });
-  console.log("[medbuddy] summary QR requested", { subjectId, status: res.status });
-  void deps;
+
+  const result = await deps.summaryQrDelivery(subjectId);
+  if (!result.ok) {
+    console.error("[medbuddy] summary QR delivery failed", {
+      subjectId,
+      reason: result.reason,
+    });
+    return;
+  }
+
+  console.log("[medbuddy] summary QR delivered", { subjectId });
 }
 
 async function push(

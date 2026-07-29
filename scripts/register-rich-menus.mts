@@ -35,17 +35,11 @@ if (!token) {
   process.exit(1);
 }
 
-const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
-if (!baseUrl) {
-  console.error("NEXT_PUBLIC_BASE_URL is not set — the caregiver menu needs it.");
-  process.exit(1);
-}
-
 const client = new LineSetupClient({ channelAccessToken: token });
 const root = process.cwd();
 
 const elder = elderRichMenu();
-const caregiver = caregiverRichMenu(baseUrl);
+const caregiver = caregiverRichMenu();
 
 // Belt and braces: the rule that an elder is never sent a link is enforced in
 // code rather than trusted to the definition above staying correct.

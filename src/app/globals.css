@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #f3f7f6;
@@ -254,6 +255,160 @@ a {
 
 .pairing-note {
   margin-top: 10px;
+}
+
+.link-state {
+  display: inline-flex !important;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.link-state-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.link-state[data-state="linked"] {
+  color: var(--success);
+}
+
+.link-state[data-state="linked"] .link-state-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.1);
+}
+
+.link-state[data-state="awaiting_role"],
+.link-state[data-state="mismatch"] {
+  color: var(--warning);
+}
+
+.link-state[data-state="awaiting_role"] .link-state-dot,
+.link-state[data-state="mismatch"] .link-state-dot {
+  background: #d97706;
+}
+
+.link-state[data-state="unavailable"] {
+  color: var(--danger);
+}
+
+.link-state[data-state="unavailable"] .link-state-dot {
+  background: var(--danger);
+}
+
+.hub-card {
+  margin-top: 22px;
+  border: 1px solid #b9d8d2;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f8fcfb 0%, #edf8f6 100%);
+  padding: clamp(20px, 3vw, 28px);
+  box-shadow: var(--shadow);
+}
+
+.hub-heading,
+.hub-footnote {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.hub-heading h2 {
+  margin-top: 3px;
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.hub-heading p:last-child {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.hub-refresh {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  padding: 8px 12px;
+  color: var(--primary-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.hub-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.15fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.hub-node {
+  display: grid;
+  min-height: 112px;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.hub-node-primary {
+  border-color: #8fc7be;
+  background: var(--primary);
+  color: white;
+}
+
+.hub-node-kicker {
+  color: var(--primary-strong);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.hub-node-primary .hub-node-kicker {
+  color: #c7eee8;
+}
+
+.hub-node strong {
+  font-size: 0.96rem;
+}
+
+.hub-node > span:last-child {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.hub-node-primary > span:last-child {
+  color: #d8f3ef;
+}
+
+.hub-arrow {
+  color: var(--primary);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.hub-footnote {
+  align-items: center;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.hub-footnote .link-state {
+  margin-top: 0;
 }
 
 .workspace-grid {
@@ -706,8 +861,20 @@ a {
 
   .phone-pair,
   .workspace-aside,
-  .coverage-grid {
+  .coverage-grid,
+  .hub-flow {
     grid-template-columns: 1fr;
+  }
+
+  .hub-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+
+  .hub-heading,
+  .hub-footnote {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .patient-identity {

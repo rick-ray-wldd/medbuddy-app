@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CONDITION_LABELS, type SeededSubject } from "@/lib/subjects";
 import { buildClinicianSummary, type ClinicianSummary } from "@/lib/summary/clinician";
 import type { SubjectLog } from "@/lib/log/types";
@@ -76,9 +77,9 @@ export function NoHistory({
         尚未有任何核對紀錄。{sharedView ? "請家屬先完成一次核對。" : "請先在首頁完成一次核對,這張單子才有內容。"}
       </p>
       {!sharedView && (
-        <a className="mt-6 inline-block underline" href="/">
+        <Link className="mt-6 inline-block underline" href="/">
           回到首頁
-        </a>
+        </Link>
       )}
     </main>
   );

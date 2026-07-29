@@ -1,13 +1,17 @@
 # MedBuddy — Technical Design Document
 
-本文件描述 MedBuddy 的技術事實、目標設計與尚未解決的風險。產品需求以
-`docs/PRD.md` 為準。本次程式行為盤點基準為 2026-07-29 的 `de4784f`；其後的
-`24e6f72` 只修改文件，沒有改變這份技術基準。
+This document records MedBuddy's technical facts, its target design, and the
+risks that are still open. Product requirements are governed by
+`docs/PRD.md`. The code behaviour described here was surveyed at `de4784f`
+(2026-07-29); the later `24e6f72` changed documentation only and did not move
+that baseline.
 
-本專案是 review prototype，不是 production-ready 醫療系統。未完成的認證、
-授權、資料生命週期、交易一致性與供應商治理，不得用「Demo」一詞略過。
+This is a review prototype, **not a production-ready medical system**.
+Authentication, authorisation, data lifecycle, transactional consistency and
+vendor governance are unfinished, and the word "demo" is not permitted to stand
+in for any of them.
 
-開發與驗證命令：
+Development and verification commands:
 
 ```bash
 npm install
@@ -16,98 +20,111 @@ npm test
 npm run verify
 ```
 
-`npm run verify` 目前只執行 typecheck、test 與 production build；它**不包含**
-`npm run lint`，也不是安全、隱私或端到端驗收的證明。測試數量以執行當下輸出
-為準，本文件不固定數字。
+`npm run verify` currently runs typecheck, tests and a production build. It
+does **not** run `npm run lint`, and it is not evidence of security, privacy or
+end-to-end acceptance. Test counts are whatever the run prints; this document
+does not fix a number.
 
 ---
 
-## 0. 文件語意：Current 與 Target 必須分開
+## 0. Document semantics: Current and Target must stay apart
 
-本文件使用以下狀態，避免把方向寫成已完成：
+These status markers are used throughout, so that a direction is never written
+as a finished thing:
 
-| 標記 | 定義 |
+| Marker | Meaning |
 | --- | --- |
-| **Current** | 目前 HEAD 可由程式碼或測試證實的行為 |
-| **Prototype** | 已有可展示路徑，但仍依賴 seed、人工觸發或 demo-only 設定 |
-| **Partial** | 只有部分資料流接通；不得宣稱端到端完成 |
-| **Target** | 已決定的下一版 interface／invariant，尚未全部實作 |
-| **Open** | 產品理由或風險取捨尚未決定，實作前必須回答 |
+| **Current** | Behaviour at HEAD that code or a test can demonstrate |
+| **Prototype** | A demonstrable path that still depends on seeded data, a manual trigger, or demo-only configuration |
+| **Partial** | Only part of the data flow is connected; end-to-end completion may not be claimed |
+| **Target** | An interface or invariant that has been decided and is not fully implemented |
+| **Open** | A product rationale or risk trade-off that is undecided and must be answered before implementation |
 
-技術設計採用以下一致詞彙：
+The design uses this vocabulary consistently:
 
-- **Module**：有 interface 與 implementation 的功能集合。
-- **Interface**：caller 正確使用 module 必須知道的全部內容，包含型別、前置條件、
-  invariant、設定、錯誤與效能特性，不只 TypeScript 型別。
-- **Seam**：行為可被替換而不需修改 caller 的位置。
-- **Adapter**：在 seam 上滿足 interface 的具體實作。
-- **Deep module**：caller 學習很小的 interface，卻取得大量一致行為；目標是提高
-  leverage 與 locality。
+- **Module** — a set of behaviour with an interface and an implementation.
+- **Interface** — everything a caller must know to use the module correctly:
+  types, preconditions, invariants, configuration, errors and performance
+  characteristics. Not merely the TypeScript signature.
+- **Seam** — a place where behaviour can be substituted without changing the
+  caller.
+- **Adapter** — a concrete implementation satisfying an interface at a seam.
+- **Deep module** — the caller learns a small interface and receives a large
+  amount of consistent behaviour. The goal is leverage and locality.
 
 ---
 
-## 1. 產品技術目標與範圍
+## 1. Technical goals and scope
 
-### 1.1 核心使用流程
+### 1.1 Core flows
 
-MedBuddy 要讓家庭帶進診間的資訊，比單一處方紀錄更完整，但不替醫療專業人員
-做處方決定。核心流程為：
+MedBuddy exists to let a family carry more into the consulting room than a
+single prescription record shows, without making a prescribing decision on a
+professional's behalf. Four flows:
 
-1. **自然語言觀察 → 結構化紀錄 → clinician summary**
-   照顧者用自己的話描述症狀、自行用藥、飲酒或漏服；系統只分段與分類，保留
-   原文，最後與用藥快照一起形成診間摘要。
-2. **藥袋 OCR → 人工 review → check snapshot**
-   視覺模型只轉錄照片中可見文字。照顧者確認或修正後，資料必須走與手動輸入
-   相同的 grounding、rule、verdict、snapshot 路徑。
-3. **schedule → bounded deterministic text + Serin demo voice**
-   Target 是讓照顧者設定時間，並由已確認資料產生長者版本文字，再選擇性使用
-   Fish Audio 的 Serin demo voice 播放。Current 仍讀取 seeded cupboard，且 fallback
-   validation fail-open；因此只能稱為有界的 deterministic text，不能稱為 verified。
-4. **同一 LINE 帳號可重新選擇角色；臨床對象不隨角色切換**
-   角色是介面權限與文案投影，不是 subject selector。這是 Target；目前明確配置的
-   two-account allowlist 與 elder-terminal 規則尚未完全符合，見 §7。
+1. **Natural-language observation → structured record → clinician summary.**
+   The caregiver describes symptoms, self-medication, alcohol or a missed dose
+   in their own words. The system segments and classifies only, preserving the
+   original wording, and the result joins the medication snapshot on the sheet
+   taken to an appointment.
+2. **Medication-bag OCR → human review → check snapshot.**
+   The vision model transcribes visible text and nothing else. After the
+   caregiver confirms or corrects it, the data must travel the same grounding →
+   rule → verdict → snapshot path as anything typed by hand.
+3. **Schedule → bounded deterministic text + Serin demo voice.**
+   *Target:* the caregiver sets times, elder-facing text is generated from
+   confirmed data, and Fish Audio's Serin demo voice optionally speaks it.
+   *Current:* it still reads a seeded cupboard, and fallback validation
+   fails open — so this is bounded deterministic text, and may not be called
+   verified.
+4. **One LINE account may re-select its role; the clinical subject does not
+   change with it.**
+   A role is an interface permission and a text projection, not a subject
+   selector. This is *Target*: the explicitly configured two-account allowlist
+   and the elder-terminal rule do not yet fully agree with it — see §7.
 
-### 1.2 不做的臨床行為
+### 1.2 Clinical acts this product does not perform
 
-- 不判定「安全」或「可以繼續吃」。
-- 不建議停藥、換藥、增減劑量或替代醫囑。
-- 不把「查不到」改寫成推測。
-- 不從藥品外觀、適應症或相鄰列推測藥名。
-- 不由系統推論服用時段、飯前飯後、劑量或順序。
-- 不要求或評分長者回報是否服藥，不做 streak 或 adherence score。
+- Does not judge something "safe" or "fine to continue".
+- Does not advise stopping, switching, increasing, decreasing, or substituting.
+- Does not turn "not found" into a guess.
+- Does not infer a drug name from appearance, indication, or a neighbouring row.
+- Does not derive dosing times, meal relation, dose or sequence.
+- Does not ask the older adult to report whether he took a medicine, and keeps
+  no streak or adherence score.
 
-### 1.3 狀態矩陣
+### 1.3 Status matrix
 
-| Capability | Current | Target | 主要證據／缺口 |
+| Capability | Current | Target | Principal evidence / gap |
 | --- | --- | --- | --- |
-| TFDA grounding | **Current** | 保持 deterministic；改善 canonical ambiguity | `src/lib/grounding/**`, committed TFDA tables |
-| STOPP／TFDA warning evaluation | **Current** | 完整 schema 與 reference validation；擴充 coverage | `src/lib/rules/**`, `config/rules/**` |
-| Typed medication check | **Current** | 集中成單一 deep `ClinicalCheck` module | `/api/check`, `buildVerdict`, `narrate` |
-| Observation segmentation | **Current** | 區分 observer、reporter、question；驗證完整性 | `/api/observation`, caregiver LINE text |
-| Observation → summary | **Current with attribution defect** | 只把 caregiver observations 放進該區塊 | elder question 目前混入 `Observation[]` |
-| OCR transcription | **Partial / bounded** | provider timeout、quota、review audit；建立可驗證 provenance | value 只和模型自報 evidence 比對，沒有和影像像素比對 |
-| OCR review → check | **Partial** | 明確逐列確認後一次寫入 snapshot | 主頁能加到 textarea；`rx` 目前變成 `unknown` |
-| OCR intake → snapshot | **Prototype** | 真正 confirmation route 寫入 `intake[]` | HEAD 只有型別、讀取與 seed script；一般 `/api/check` 不寫 intake |
-| Elder 「我的藥」／web preview | **Partial / critical safety regression** | 只投影 validated narration 或另建同等驗證的 elder interface | warm frame 遺失 purpose/coverage/items；現有 focused tests 未涵蓋 preservation/provenance/mapping |
-| Clinician summary | **Current, publicly exposed** | authenticated caregiver view；短效 clinician grant | direct `/summary/[subjectId]` 無認證 |
-| Web signed QR share | **Current, incomplete protection** | 授權 mint、可撤銷、retention/deletion | data-URL QR + HMAC 8h；payload 未加密；direct route bypass |
-| LINE-hosted QR image | **Partial / likely broken** | 修正 private Blob lookup 並做 deployed probe | proxy 用 `get(found.url)`；相同 Blob 問題在 role store 已改用 pathname；route 未測 |
-| LINE webhook | **Current** | shared idempotency、queue、可重試處理 | HMAC 驗證；per-process dedupe、先 mark 後處理 |
-| LINE role reselect | **Partial / contradictory** | 同帳號可重選角色，不改 subject | explicit pair 要求不同帳號；elder 預設不能切換 |
-| Reminder slot CRUD | **Current, anonymous** | authenticated caregiver + fixed subject guard | `/api/schedule` 可操作任一 seeded subject |
-| Reminder delivery | **Prototype** | subject-safe、latest confirmed regimen、可靠分鐘級 tick | 目前人工觸發最可靠；daily cron 與 10 分鐘 grace 不相容 |
-| Serin voice | **Prototype** | 建立 AI persona disclosure、可驗證 consent、timeout | repository 將 Serin 定義為 demo persona；目前 outbound 未明示 AI／非家人 |
-| Authentication／authorization | **Not built** | 所有 read/write/egress/spend endpoint 有 caller claim | `ROLE_ACTIONS` 只保護 LINE postback |
-| Transactional persistence | **Not built** | transaction + audit + retention | Blob whole-document overwrite |
+| TFDA grounding | **Current** | Stay deterministic; improve canonical ambiguity | `src/lib/grounding/**`, committed TFDA tables |
+| STOPP / TFDA warning evaluation | **Current** | Full schema and reference validation; widen coverage | `src/lib/rules/**`, `config/rules/**` |
+| Typed medication check | **Current** | Consolidate into one deep `ClinicalCheck` module | `/api/check`, `buildVerdict`, `narrate` |
+| Observation segmentation | **Current** | Separate observer, reporter and question; validate completeness | `/api/observation`, caregiver LINE text |
+| Observation → summary | **Current, with an attribution defect** | Only caregiver observations belong in that section | elder questions currently mix into `Observation[]` |
+| OCR transcription | **Partial / bounded** | Provider timeout, quota, review audit; verifiable provenance | a value is compared only against the model's self-reported evidence, never against image pixels |
+| OCR review → check | **Partial** | Explicit per-row confirmation, then one write to the snapshot | the dashboard can append to the textarea; `rx` currently degrades to `unknown` |
+| OCR intake → snapshot | **Prototype** | A real confirmation route writes `intake[]` | HEAD has the type, the read and a seed script only; ordinary `/api/check` writes no intake |
+| Elder 「我的藥」 / web preview | **Partial / critical safety regression** | Project validated narration only, or build an elder interface with equivalent validation | the warm frame drops purpose, coverage and items; existing focused tests do not cover preservation, provenance or mapping |
+| Clinician summary | **Current, publicly exposed** | Authenticated caregiver view; short-lived clinician grant | direct `/summary/[subjectId]` has no authentication |
+| Web signed QR share | **Current, incomplete protection** | Authorised mint, revocable, retention and deletion | data-URL QR + HMAC 8h; payload unencrypted; direct route bypasses it |
+| LINE-hosted QR image | **Partial / likely broken** | Fix the private Blob lookup and probe it on a deployment | the proxy uses `get(found.url)`; the same Blob problem was already fixed in the role store by switching to pathname; the route is untested |
+| LINE webhook | **Current** | Shared idempotency, a queue, retryable handling | HMAC verified; dedupe is per-process and marks before handling |
+| LINE role reselect | **Partial / contradictory** | One account may re-select a role without changing the subject | the explicit pair requires two different accounts; an elder cannot switch by default |
+| Reminder slot CRUD | **Current, anonymous** | Authenticated caregiver plus a fixed-subject guard | `/api/schedule` can operate on any seeded subject |
+| Reminder delivery | **Prototype** | Subject-safe, latest confirmed regimen, reliable minute-level tick | manual triggering is currently the reliable path; a daily cron is incompatible with a 10-minute grace window |
+| Serin voice | **Prototype** | AI-persona disclosure, verifiable consent, timeout | the repository defines Serin as a demo persona; outbound audio does not yet state that it is AI and not a family member |
+| Authentication / authorisation | **Not built** | Every read, write, egress and spend endpoint carries a caller claim | `ROLE_ACTIONS` protects LINE postbacks only |
+| Transactional persistence | **Not built** | Transactions, audit, retention | Blob whole-document overwrite |
 
 ---
 
-## 2. System context 與資料流
+## 2. System context and data flow
 
 ### 2.1 Context
 
 ```text
-照顧者 Web / LINE                    長者 LINE                    Clinician browser
+Caregiver web / LINE                 Elder LINE                   Clinician browser
         │                                │                               │
         └────────────── HTTP / webhook ──┴────────── signed QR URL ──────┘
                                       │

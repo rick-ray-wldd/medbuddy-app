@@ -13,6 +13,7 @@ function roles(bindings: Record<string, RoleBinding>): RoleStore {
   return {
     get: async (userId) => bindings[userId] ?? null,
     put: async () => undefined,
+    findByRole: async () => null,
   };
 }
 
@@ -83,6 +84,7 @@ describe("loadHubStatus", () => {
         throw new Error("offline");
       },
       put: async () => undefined,
+    findByRole: async () => null,
     };
     const failingLogs: LogStore = {
       read: async () => {

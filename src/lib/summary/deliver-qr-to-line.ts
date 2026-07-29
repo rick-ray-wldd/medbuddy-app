@@ -2,6 +2,7 @@ import "server-only";
 
 import QRCode from "qrcode";
 import type { Delivery } from "@/lib/delivery/types";
+import type { RoleStore } from "@/lib/roles/types";
 import { LineDelivery } from "@/lib/delivery/line/LineDelivery";
 import { getLineConfig } from "@/lib/delivery/line/config";
 import {
@@ -43,6 +44,8 @@ export type SummaryQrDeliveryDeps = {
     png: Uint8Array,
   ) => Promise<{ url: string }>;
   delivery?: Delivery;
+  /** Injectable so offline tests need no store; defaults to the registry's. */
+  roleStore?: RoleStore;
 };
 
 async function renderQr(url: string): Promise<Uint8Array> {
@@ -99,7 +102,16 @@ export async function deliverSummaryQrToLine(
     };
   }
 
-  const elderTo = recipientForDemoRole("elder");
+  // Who is the older adult's phone? The role binding knows, because he
+  // answered the card. The environment variable is a fallback, not the
+  // source: it was empty during the demo — deliberately, so one phone could
+  // show both sides — and this failed with "no LINE account is bound to 父親"
+  // while his phone had been bound as the elder for twenty minutes.
+  //
+  // Injectable so the offline tests keep working without a store.
+  const roleStore = deps.roleStore ?? (await import("@/lib/registry")).getRegistry().roleStore;
+  const boundElder = await roleStore.findByRole(subject.id, "elder").catch(() => null);
+  const elderTo = boundElder?.channelUserId ?? recipientForDemoRole("elder");
   if (!elderTo) {
     return {
       ok: false,
@@ -107,7 +119,10 @@ export async function deliverSummaryQrToLine(
       reason: `no LINE account is bound to ${subject.displayName}`,
     };
   }
-  const caregiverTo = recipientForDemoRole("caregiver");
+  const boundCaregiver = await roleStore
+    .findByRole(subject.id, "caregiver")
+    .catch(() => null);
+  const caregiverTo = boundCaregiver?.channelUserId ?? recipientForDemoRole("caregiver");
 
   const now = deps.now?.() ?? Date.now();
   const token = createShareToken(subject.id, now);

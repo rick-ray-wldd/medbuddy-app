@@ -30,4 +30,17 @@ export type RoleBinding = {
 export interface RoleStore {
   get(channelUserId: string): Promise<RoleBinding | null>;
   put(binding: RoleBinding): Promise<void>;
+  /**
+   * Which account holds a role for a subject.
+   *
+   * The reverse of `get`, and the reason it exists: sending the clinician
+   * summary needs to know which phone is the older adult's, and that answer
+   * lives here the moment he taps the card. Asking an environment variable
+   * instead made 產生回診單 fail with "no LINE account is bound to 父親" while
+   * his phone was, in fact, bound.
+   *
+   * Null when nobody holds it — which is a real state during setup, not an
+   * error.
+   */
+  findByRole(subjectId: string, role: Role): Promise<RoleBinding | null>;
 }

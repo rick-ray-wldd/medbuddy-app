@@ -12,7 +12,7 @@
  * impossible instead of unlikely.
  */
 
-import type { RoleBinding, RoleStore } from "./types";
+import type { Role, RoleBinding, RoleStore } from "./types";
 
 const PREFIX = "medbuddy-role/";
 
@@ -32,6 +32,13 @@ export class InMemoryRoleStore implements RoleStore {
 
   async put(binding: RoleBinding): Promise<void> {
     this.bindings.set(binding.channelUserId, binding);
+  }
+
+  async findByRole(subjectId: string, role: Role): Promise<RoleBinding | null> {
+    for (const binding of this.bindings.values()) {
+      if (binding.role === role && binding.subjectId === subjectId) return binding;
+    }
+    return null;
   }
 }
 
@@ -119,6 +126,31 @@ export class BlobRoleStore implements RoleStore {
       });
       throw err;
     }
+  }
+
+  /**
+   * Scans the prefix. Fine for a demo holding two bindings, and the wrong
+   * shape for a facility holding two hundred — which is another entry on the
+   * list of reasons this record belongs in Postgres rather than Blob.
+   *
+   * The in-process cache wins over a listing, same as in `get`: a binding
+   * written seconds ago may not be listed yet, and setup is exactly when both
+   * a write and this lookup happen close together.
+   */
+  async findByRole(subjectId: string, role: Role): Promise<RoleBinding | null> {
+    for (const binding of BlobRoleStore.recent().values()) {
+      if (binding.role === role && binding.subjectId === subjectId) return binding;
+    }
+
+    const { list, get } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: PREFIX, limit: 100 });
+    for (const blob of blobs) {
+      const res = await get(blob.url, { access: "private" }).catch(() => null);
+      if (!res || res.statusCode !== 200) continue;
+      const binding = JSON.parse(await new Response(res.stream).text()) as RoleBinding;
+      if (binding.role === role && binding.subjectId === subjectId) return binding;
+    }
+    return null;
   }
 
   async put(binding: RoleBinding): Promise<void> {

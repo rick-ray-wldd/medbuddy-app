@@ -291,3 +291,58 @@ describe("clinician-summary QR delivery", () => {
     );
   });
 });
+
+describe("who the QR is addressed to", () => {
+  it("uses the role binding rather than the environment", async () => {
+    // The failure this fixes: LINE_DEMO_ELDER_USER_ID was empty on purpose, so
+    // one phone could demonstrate both roles — and 產生回診單 answered "no LINE
+    // account is bound to 父親" while that phone had been bound as the elder
+    // for twenty minutes. The binding is what he actually answered.
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "");
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "");
+    vi.stubEnv("SUMMARY_SHARE_SECRET", "test-secret");
+
+    const sent: { to: string; role: string }[] = [];
+    const result = await deliverSummaryQrToLine(
+      { subjectId: "subj-father", baseUrl: "https://example.test" },
+      {
+        now: () => 1_700_000_000_000,
+        renderQr: async () => new Uint8Array([1, 2, 3]),
+        storeQr: async () => ({ url: "https://blob.test/qr.png" }),
+        delivery: {
+          async send(target) {
+            sent.push({ to: target.channelUserId, role: target.role });
+            return { ok: true, providerMessageId: "m1" };
+          },
+        },
+        roleStore: {
+          async get() {
+            return null;
+          },
+          async put() {},
+          async findByRole(subjectId, role) {
+            if (subjectId !== "subj-father") return null;
+            return role === "elder"
+              ? {
+                  channelUserId: "U-father-phone",
+                  role: "elder" as const,
+                  subjectId,
+                  boundAt: "2026-07-29T09:00:00.000Z",
+                }
+              : {
+                  channelUserId: "U-daughter-phone",
+                  role: "caregiver" as const,
+                  subjectId,
+                  boundAt: "2026-07-29T09:00:00.000Z",
+                };
+          },
+        },
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(sent.map((s) => s.to)).toEqual(["U-father-phone", "U-daughter-phone"]);
+    // He gets it as the elder — which is what forbids a link in his copy.
+    expect(sent[0].role).toBe("elder");
+  });
+});

@@ -12,6 +12,11 @@ import { deliverSummaryQrToLine } from "@/lib/summary/deliver-qr-to-line";
  * Reads the RAW body before anything parses it — the signature is computed
  * over raw bytes (§7).
  */
+// Voice replies run pipeline + Fish synthesis + Blob inside this invocation;
+// the platform default duration can kill them mid-work, which surfaces as a
+// reply that never arrives (LINE's retry is then deduped by design).
+export const maxDuration = 60;
+
 export async function POST(req: Request): Promise<Response> {
   const rawBody = await req.text();
   const signature = req.headers.get("x-line-signature");

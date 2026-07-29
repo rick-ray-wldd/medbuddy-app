@@ -31,6 +31,9 @@ type Body = {
   voiceId?: string;
 };
 
+// Pipeline + Fish synthesis + Blob can exceed the platform default duration.
+export const maxDuration = 60;
+
 export async function POST(request: Request): Promise<NextResponse> {
   let body: Body;
   try {

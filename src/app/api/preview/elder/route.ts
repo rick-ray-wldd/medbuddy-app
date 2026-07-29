@@ -50,8 +50,14 @@ export async function GET(request: Request) {
 
   const outcome = await narrate(latest.verdict, "elder", null, knownMedicines);
   const narration = outcome.narration.segments.map((s) => s.text).join("\n");
+  // Same arguments the LINE path passes, so the preview cannot drift from
+  // what he actually receives — which is the only reason to show it at all.
   const text = narration.trim()
-    ? frameMyMeds(narration, { slotTimes: slots })
+    ? frameMyMeds(narration, {
+        slotTimes: slots,
+        intake: latest.intake,
+        conditions: subject.conditions,
+      })
     : narration;
 
   return NextResponse.json({

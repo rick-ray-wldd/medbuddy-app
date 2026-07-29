@@ -77,15 +77,15 @@ export type Cell = {
 export const ELDER_CELLS: Cell[] = [
   { label: "我的藥", sub: "今天在吃什麼", icon: "pill", data: "action=my_meds" },
   { label: "這顆是什麼", sub: "用說的或打字", icon: "magnifier", data: "action=how_to_ask" },
-  { label: "再唸一次", sub: "剛剛那則語音", icon: "speaker", data: "action=repeat" },
-  { label: "找家人", sub: "傳個訊息給他們", icon: "people", data: "action=reach_family" },
+  { label: "再唸一次", sub: "最近核對說明", icon: "speaker", data: "action=repeat" },
+  { label: "找家人", sub: "通知照顧者", icon: "people", data: "action=reach_family" },
 ];
 
 export const CAREGIVER_CELLS: Cell[] = [
   { label: "記一件事", sub: "打一段話就好", icon: "pencil", data: "action=note" },
   { label: "產生回診單", sub: "QR 傳給長輩", icon: "document", data: "action=summary" },
   { label: "他問了什麼", sub: "最近的提問", icon: "question", data: "action=recent_questions" },
-  { label: "我照顧的人", sub: "切換對象", icon: "people", data: "action=subjects" },
+  { label: "照顧對象", sub: "父親 · 固定配對", icon: "people", data: "action=subjects" },
   { label: "開啟網頁", sub: "完整介面", icon: "window", uri: "" }, // uri filled below
   { label: "切換身分", sub: "重新選擇", icon: "swap", data: "action=rebind" },
 ];

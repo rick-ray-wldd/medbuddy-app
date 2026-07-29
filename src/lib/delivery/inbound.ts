@@ -27,6 +27,11 @@
 import type { Delivery } from "./types";
 import { bindRole, parseRoleFromPostback } from "../roles/bind";
 import type { Role, RoleStore } from "../roles/types";
+import {
+  canClaimDemoRole,
+  getDemoLinePair,
+  recipientForDemoRole,
+} from "./line/demo-pair";
 
 export type InboundMessage = {
   channelUserId: string;
@@ -65,6 +70,11 @@ function seededSubjectIdFor(channelUserId: string): string | null {
 
 /** Who to ping when the older adult presses 找家人. Demo-level, same as above. */
 function caregiverUserIdFor(subjectId: string): string | null {
+  const demoCaregiver = recipientForDemoRole("caregiver");
+  if (demoCaregiver && subjectId === getDemoLinePair().subjectId) {
+    return demoCaregiver;
+  }
+
   const map = process.env.LINE_SUBJECT_CAREGIVER_MAP;
   if (!map) return null;
   for (const pair of map.split(",")) {
@@ -84,6 +94,11 @@ export type InboundDeps = {
     pushFlex(userId: string, message: unknown): Promise<{ ok: boolean }>;
     linkRichMenu(userId: string, richMenuId: string): Promise<{ ok: boolean }>;
   };
+};
+
+const ROLE_ACTIONS: Record<Role, ReadonlySet<string>> = {
+  elder: new Set(["my_meds", "repeat", "how_to_ask", "reach_family"]),
+  caregiver: new Set(["note", "summary", "recent_questions", "subjects"]),
 };
 
 /**
@@ -180,10 +195,15 @@ async function handlePostback(
   // ── binding
   const claimedRole = parseRoleFromPostback(data);
   if (claimedRole) {
-    const subjectId =
-      seededSubjectIdFor(channelUserId) ??
-      process.env.LINE_DEFAULT_SUBJECT_ID ??
-      "subj-father";
+    if (!canClaimDemoRole(channelUserId, claimedRole)) {
+      console.error("[medbuddy] refused role claim from non-demo phone", {
+        channelUserId,
+        claimedRole,
+      });
+      return;
+    }
+
+    const subjectId = getDemoLinePair().subjectId;
 
     const outcome = await bindRole(
       roleStore,
@@ -226,6 +246,18 @@ async function handlePostback(
   const role: Role = binding?.role ?? "elder";
   // An unbound sender gets the card, never an answer (§6.5).
   if (!binding || !subjectId) return await sendRoleCard(channelUserId, deps);
+
+  // A rich menu hides the other role's buttons; it is not an authorisation
+  // boundary. Postback data is client input, so re-check the action against the
+  // stored role before invoking anything that could expose caregiver context.
+  if (!ROLE_ACTIONS[role].has(action)) {
+    console.error("[medbuddy] refused action outside bound role", {
+      channelUserId,
+      role,
+      action,
+    });
+    return;
+  }
 
   const actions = await import("./menu-actions");
   let reply: { text: string; fromPipeline: boolean } | null = null;

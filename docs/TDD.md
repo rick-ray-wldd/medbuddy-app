@@ -6,7 +6,43 @@ Run: `npm install && npm run dev` · Tests: `npm test` · All three: `npm run ve
 Live: https://medbuddy-app.vercel.app
 
 Next.js 16 (App Router) · TypeScript · Tailwind 4 · Vitest · deployed on Vercel.
-145 tests. No database, no authentication. No external call at all unless a caregiver opts into a cloned voice (§2, §8).
+Run `npm test` for the current exact test count. No authentication; Vercel Blob
+is the demo persistence layer, while LINE, Gemini observation extraction, and
+optional Fish Audio are explicit external boundaries (§2, §8).
+
+---
+
+## Demo deployment contract — two phones, one subject
+
+This is the authoritative scope for the review prototype:
+
+```text
+DemoCarePair
+  subjectId           = LINE_DEMO_SUBJECT_ID (default: subj-father)
+  elderLineUserId     = LINE_DEMO_ELDER_USER_ID
+  caregiverLineUserId = LINE_DEMO_CAREGIVER_USER_ID
+
+RoleBinding(elderLineUserId)     -> elder     -> subjectId
+RoleBinding(caregiverLineUserId) -> caregiver -> subjectId
+```
+
+`src/lib/delivery/line/demo-pair.ts` owns recipient resolution and the fixed
+subject. A role-card postback is validated, persisted through `RoleStore`, and
+links the corresponding per-user rich menu. When both account ids are
+configured, the role claim is allowlisted and a third phone is rejected. The
+legacy `LINE_ELDER_USER_ID` remains an elder-only migration fallback.
+
+The browser has no subject selector. `/api/line/deliver`, clinician-summary QR
+delivery, `找家人`, and the caregiver roster all resolve through this same pair.
+Other synthetic subjects remain fixtures for grounding/rule tests; they are not
+part of the public demo. Dynamic claims cannot safely allocate “the first elder
+slot” through Vercel Blob because Blob is not transactional, so the two LINE
+User IDs are deployment configuration rather than discovered by race-prone
+first-write logic.
+
+Out of scope: pairing codes, account administration, multi-elder switching,
+multi-caregiver permissions, facility rosters, and clinician accounts. The
+target many-to-many model remains in `docs/DATA-MODEL.md`.
 
 ---
 
@@ -28,7 +64,7 @@ verdict/     the single object carrying every clinical judgement
 narration/   translate a verdict into language — receives only the verdict
       │
       ▼
-delivery/    web today, LINE behind the same interface
+delivery/    web and LINE behind the same interface
 ```
 
 > **Clinical judgement ends at the verdict object.**
@@ -133,12 +169,11 @@ around performs it without being taught. `speechSynthesis` reads the narration
 back at 0.85 rate. Neither leaves the device, neither needs a key, both work
 offline, and a browser without them shows no button rather than a dead one.
 
-The elder view has a question box and nothing to tick. He speaks to ask; there
-is no control anywhere on that page for confirming or denying.
-
-**Still not a conversation.** The question box records what he asked and does
-not answer it — routing a question back through grounding is the next step, not
-a claim. Of the four required behaviours this remains the weakest.
+The caregiver web dashboard has no adherence control for the elder. In LINE, a
+bound elder may type a medicine name; the inbound seam grounds it, builds a
+verdict, narrates for the elder audience, records the question, and replies.
+Inbound LINE audio is downloaded and recorded but has no STT path, so it is not
+answered. This is an explicit failure boundary rather than a substitute guess.
 
 The register records dosing text, and **timing is not carried into the item
 model** — so "explains purpose, timing and interactions" is true of purpose and
@@ -159,9 +194,9 @@ model id **fails** rather than storing a profile, because a voice that appears
 in the older adult's options and stays silent when he presses it is worse than
 no option.
 
-There is no route to a voice that is not the caregiver's own, and no outbound
-path at all. That is the whole design: cloned family voices are the live fraud
-vector against older adults, and a deceased person cannot consent.
+There is no route to a voice that is not the caregiver's own. The sanctioned
+outbound path is caregiver-initiated `/api/line/deliver`; without a configured
+consented voice profile it sends text only. A deceased person cannot consent.
 
 ⚠️ **This is the one place health information leaves the process**, which is why
 it is opt-in per subject rather than the default, and why the browser voice —
@@ -201,25 +236,27 @@ minting a new one — and it is what the roadmap extends. A deceased relative's
 voice, which is the most emotionally effective version, cannot be consented to
 and is excluded permanently.
 
-**Planned, cheap, not done:** browser `SpeechRecognition` (`zh-TW`) for input
-and `speechSynthesis` for read-aloud. Roughly thirty lines, no external
-dependency, no fraud surface — deferred behind persistence and this document.
+**Built:** browser `SpeechRecognition` (`zh-TW`) for hold-to-talk input and
+`speechSynthesis` for read-aloud at a slower rate. Unsupported browsers hide the
+control instead of showing a dead button.
 
 ---
 
 ## 3. Structured logs
 
-**Built, in memory.** Every check appends a snapshot; observations are recorded
-in the carer's words; the change between consecutive snapshots is computed
-rather than stored, because storing it would let it drift from them.
+**Built.** Every check appends a snapshot; observations are recorded in the
+carer's words; the change between consecutive snapshots is computed rather than
+stored. `LogStore` selects `BlobLogStore` on Vercel when
+`BLOB_READ_WRITE_TOKEN` exists and `InMemoryLogStore` locally.
 
-The store is an interface with an in-memory implementation, and the limits are
-real: a restart loses everything, and a serverless deployment may not share a
-process between requests. Replacing it with Postgres changes one file.
+Blob makes browser and LINE survive serverless process boundaries, but it is a
+whole-document read-modify-write store: two concurrent writers can clobber one
+another. That is acceptable only for the sequential one-family demo. Replacing
+it with transactional Postgres stays behind the same interface.
 
-`Carer` and `CareRelationship` are in the model below but **not yet code** —
-this build stamps a single carer id. What is enforced is the part that carries
-the risk: every finding names its subject.
+`Carer` and many-to-many `CareRelationship` remain target-model concepts. This
+demo instead persists two `RoleBinding` records pointing to one subject. Every
+finding still names that subject.
 
 The shape:
 
@@ -355,7 +392,8 @@ support.
 
 **No LLM-as-judge anywhere.** Every check is a deterministic comparison against
 the verdict, which is why the whole clinical layer can be asserted rather than
-reviewed. `npm test` runs 145 tests offline on a clean clone (after `npm install`).
+reviewed. `npm test` runs offline on a clean clone (after `npm install`); its
+output is the source of truth for the count while the suite is changing.
 
 Layered:
 
@@ -371,9 +409,10 @@ Layered:
   the fallback across four verdict shapes × two audiences.
 - **Voice** — that no request is made without a key, that a profile cannot exist
   without consent, and that a model is always private.
-- **LINE adapter** — signature verification, idempotency, verbatim delivery, and
-  the refusal to send a link to an older adult. Written by the collaborator who
-  built the adapter, mocked so the suite runs offline.
+- **LINE adapter** — signature verification, idempotency, verbatim delivery,
+  refusal to send a link to an older adult, fixed demo-pair role claims,
+  caregiver routing, and QR image payloads. Network calls are mocked so the
+  suite runs offline.
 
 ### What the tests did not catch, and what that changed
 
@@ -401,25 +440,31 @@ support.
 
 ## 8. Privacy
 
-**By default, nothing leaves the process.** No database, no accounts, no
-telemetry — the registers are files in the repository, so a medication list is
-never sent anywhere, and the log is held in memory rather than written to disk.
+The grounding registers and rules are local committed files. In a configured
+demo deployment, health-related data can cross four explicit boundaries:
 
-**One exception, and it is a choice a caregiver makes knowingly.** Turning on a
-cloned voice sends the text being spoken — a medication explanation — to Fish
-Audio. Nothing else in the product calls out. It is opt-in per subject, the
-browser voice is the default, and with no API key configured the code makes no
-request at all. Anyone deploying this owes their users that sentence in plain
-language, not in a privacy policy.
+- medication snapshots, observations, role bindings, audio, and QR assets are
+  stored in the deployment's Vercel Blob store;
+- LINE receives text, optional audio, and QR images addressed to the two fixed
+  demo accounts;
+- Gemini receives a caregiver paragraph only when `GEMINI_API_KEY` is set, and
+  its segmentation is checked as verbatim substrings before storage;
+- Fish Audio receives narration only when a consented voice profile and key are
+  configured. Browser speech remains on-device.
+
+Without the relevant key, that provider is not called and the code takes a
+deterministic/local fallback. The prototype has no user-facing consent or
+retention administration, so it must use synthetic demo data and must not be
+presented as production compliant.
 
 **No real patient data is in this repository.** The three seeded people are
 constructed. The registers and the criteria are real, and deliberately so —
 they are public regulatory data and a CC BY paper, not anybody's record.
 
-Health information does not reach a model today, because no model is wired up.
-When one is, the boundary is already the right shape: the narrator receives the
-verdict, which contains medicines and conditions — so that is the payload to
-reason about, and it is the smallest one that could do the job.
+The narration boundary remains narrow: a narrator receives a verdict rather
+than unrestricted register or log access. Observation extraction is a separate
+span-classification boundary and cannot add text that was absent from the
+caregiver's input.
 
 For a real deployment the decisions are named rather than solved: audio
 containing health information needs signed, short-lived URLs rather than public

@@ -1,4 +1,4 @@
-import { SUBJECTS } from "@/lib/subjects";
+import { CONDITION_LABELS, DEMO_SUBJECT } from "@/lib/subjects";
 import { getRegistry } from "@/lib/registry";
 import CheckClient from "./check-client";
 
@@ -20,39 +20,87 @@ export default function Home() {
       licence: r.citation.licence,
     })),
   };
+  const conditions = DEMO_SUBJECT.conditions.map((code) => CONDITION_LABELS[code]);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 py-10">
-      <header className="mb-9">
-        <h1 className="text-3xl font-semibold tracking-tight">MedBuddy</h1>
-        <p className="mt-3 text-lg leading-relaxed text-neutral-600 dark:text-neutral-300">
-          帶長輩看診的那一次,和他自己去的那一次,拿到的醫療是不一樣的。
-          差別不在醫術,在診間裡的資訊。
-        </p>
+    <main className="medbuddy-shell">
+      <header className="app-header">
+        <div>
+          <div className="brand-lockup">
+            <span className="brand-mark" aria-hidden="true">M</span>
+            <div>
+              <p className="brand-name">MedBuddy</p>
+              <p className="brand-subtitle">照顧者用藥工作台</p>
+            </div>
+          </div>
+          <p className="header-copy">
+            把家中實際使用的藥品與照顧觀察，整理成長者看得懂、醫師用得上的資訊。
+          </p>
+        </div>
+        <div className="demo-badge" aria-label="示範環境：單一長者模式">
+          <span className="status-dot" aria-hidden="true" />
+          DEMO · 單一長者模式
+        </div>
       </header>
 
-      <CheckClient subjects={SUBJECTS} />
+      <section className="patient-banner" aria-labelledby="patient-heading">
+        <div className="patient-identity">
+          <div className="patient-avatar" aria-hidden="true">父</div>
+          <div>
+            <p className="eyebrow">目前照護對象</p>
+            <h1 id="patient-heading">{DEMO_SUBJECT.displayName}</h1>
+            <div className="patient-meta">
+              <span>{DEMO_SUBJECT.ageYears} 歲</span>
+              {conditions.map((condition) => (
+                <span key={condition}>{condition}</span>
+              ))}
+            </div>
+          </div>
+        </div>
 
-      <section className="mt-14 border-t border-neutral-200 pt-6 text-sm leading-relaxed text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
-        <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-100">
-          這些判斷從哪裡來
-        </h2>
-        <ul className="space-y-1.5">
-          <li>
-            衛福部食藥署藥品許可證 <strong>{stats.drugs.toLocaleString()}</strong> 筆 ·
-            健康食品 <strong>{stats.healthFoods}</strong> 筆 · 擷取於 {stats.registerDate}
-          </li>
-          {stats.ruleSets.map((r) => (
-            <li key={r.title}>
-              {r.title} — 收錄 <strong>{r.encoded}</strong> / {r.inSource} 條 · {r.licence}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4">
-          規則以 JSON 存在版本控制中,任何一條用藥安全規則的變動都是一個可 review 的 diff。
-          本系統不做醫療決定,只提出應該由藥師或醫師回答的問題。
-        </p>
+        <div className="pairing-panel" aria-label="LINE 雙手機示範配對">
+          <p className="eyebrow">LINE 示範配對</p>
+          <div className="phone-pair">
+            <div className="phone-role">
+              <span className="role-number" aria-hidden="true">1</span>
+              <div>
+                <strong>長者手機</strong>
+                <span>選「我是長輩」後，自動綁定父親</span>
+              </div>
+            </div>
+            <div className="phone-role">
+              <span className="role-number" aria-hidden="true">2</span>
+              <div>
+                <strong>照顧者手機</strong>
+                <span>選「我是照顧者」後，自動記錄照顧觀察</span>
+              </div>
+            </div>
+          </div>
+          <p className="pairing-note">本次 Demo 固定 1 位長者 + 1 位照顧者，不提供切換對象。</p>
+        </div>
       </section>
+
+      <CheckClient subject={DEMO_SUBJECT} />
+
+      <details className="source-disclosure">
+        <summary>資料來源與規則版本</summary>
+        <div className="source-content">
+          <p>
+            衛福部食藥署藥品許可證 <strong>{stats.drugs.toLocaleString()}</strong> 筆、
+            健康食品 <strong>{stats.healthFoods}</strong> 筆；資料擷取於 {stats.registerDate}。
+          </p>
+          <ul>
+            {stats.ruleSets.map((rule) => (
+              <li key={rule.title}>
+                {rule.title}：本系統編碼 {rule.encoded} / 原始來源 {rule.inSource} 條（{rule.licence}）
+              </li>
+            ))}
+          </ul>
+          <p>
+            規則以 JSON 版本控制；系統不做醫療決定，只整理證據、指出不確定處，並把問題交給藥師或醫師。
+          </p>
+        </div>
+      </details>
     </main>
   );
 }

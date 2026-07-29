@@ -16,20 +16,10 @@ import { findSubject } from "@/lib/subjects";
 import { createShareToken, shareUrl } from "@/lib/summary/share-token";
 import { getLineConfig } from "@/lib/delivery/line/config";
 import { LineDelivery } from "@/lib/delivery/line/LineDelivery";
-
-function elderChannelUserId(subjectId: string): string | null {
-  const map = process.env.LINE_USER_SUBJECT_MAP;
-  if (map) {
-    for (const pair of map.split(",")) {
-      const [userId, mapped] = pair.split(":").map((s) => s.trim());
-      if (userId && mapped === subjectId) return userId;
-    }
-  }
-  if (process.env.LINE_ELDER_USER_ID && subjectId === (process.env.LINE_ELDER_SUBJECT_ID ?? "subj-father")) {
-    return process.env.LINE_ELDER_USER_ID;
-  }
-  return null;
-}
+import {
+  getDemoLinePair,
+  recipientForDemoRole,
+} from "@/lib/delivery/line/demo-pair";
 
 export async function POST(request: Request) {
   let body: { subjectId?: string };
@@ -42,7 +32,14 @@ export async function POST(request: Request) {
   const subject = findSubject(body.subjectId ?? "");
   if (!subject) return NextResponse.json({ error: "unknown subject" }, { status: 400 });
 
-  const to = elderChannelUserId(subject.id);
+  if (subject.id !== getDemoLinePair().subjectId) {
+    return NextResponse.json(
+      { error: "the demo supports one fixed care subject" },
+      { status: 400 },
+    );
+  }
+
+  const to = recipientForDemoRole("elder");
   if (!to) {
     // No binding, no delivery. Never guess which LINE account belongs to which
     // person — a record sent to the wrong one is the worst error here.

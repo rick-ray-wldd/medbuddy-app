@@ -1,14 +1,40 @@
 # Data model
 
-One shared record, three role-scoped projections. The relationship between
-people is many-to-many from the start, because the shapes that matter are:
+One shared record, three role-scoped projections. The **target product** needs
+a many-to-many relationship because the shapes that matter are:
 
 - a father with two adult children who split the appointments
 - a facility carer responsible for twelve residents across a shift
 - someone caring for both parents at once
 
-A foreign key would have made the first case wrong and the other two
-impossible.
+A foreign key would make the first case wrong and the other two impossible.
+The current challenge demo intentionally does not implement that relationship;
+it proves one end-to-end care pair first.
+
+## Current demo projection
+
+```text
+DemoCarePair
+  subjectId            subj-father
+  elderLineUserId      deployment configuration
+  caregiverLineUserId  deployment configuration
+
+RoleBinding
+  channelUserId
+  role                  elder | caregiver
+  subjectId             always DemoCarePair.subjectId
+  boundAt
+```
+
+Exactly two LINE accounts project the same synthetic subject. Role selection
+writes a `RoleBinding` and links the per-user rich menu; the caregiver web
+dashboard has no subject selector. This projection is authoritative for the
+demo and must not be described as multi-elder or multi-caregiver support.
+
+`DemoCarePair` is deployment configuration, not the future persistence schema.
+The later migration replaces it with `Carer` + `CareRelationship` and a
+transactional authorization store without changing medication, verdict, or log
+ownership.
 
 ---
 

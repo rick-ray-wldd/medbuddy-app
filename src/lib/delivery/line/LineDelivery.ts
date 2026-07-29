@@ -52,6 +52,24 @@ export class LineDelivery implements Delivery {
     const limitError = checkTextLimit(message.text);
     if (limitError) return limitError;
 
+    let imageMessage:
+      | {
+          type: "image";
+          originalContentUrl: string;
+          previewImageUrl: string;
+        }
+      | undefined;
+    if (message.imageUrl) {
+      if (!message.imageUrl.startsWith("https://")) {
+        return { ok: false, reason: "image-url-not-https", retryable: false };
+      }
+      imageMessage = {
+        type: "image",
+        originalContentUrl: message.imageUrl,
+        previewImageUrl: message.imageUrl,
+      };
+    }
+
     // §7 audio out — hosted HTTPS URL + explicit duration. Verified
     // 2026-07-28: LINE accepts m4a OR mp3 (drift log), 200 MB max file size.
     // https://developers.line.biz/en/reference/messaging-api/#audio-message
@@ -109,8 +127,8 @@ export class LineDelivery implements Delivery {
 
     // Push endpoint verified 2026-07-28: POST https://api.line.me/v2/bot/message/push
     // with Authorization: Bearer {token} + Content-Type: application/json,
-    // body { to, messages } (max 5 messages — we send 1–2: text, then audio;
-    // multi-message pushes deliver in array order).
+    // body { to, messages } (max 5 messages — we send at most 3: text, image,
+    // then audio; multi-message pushes deliver in array order).
     // https://developers.line.biz/en/reference/messaging-api/#send-push-message
     //
     // `message.text` is assigned VERBATIM by direct property assignment — no
@@ -118,10 +136,17 @@ export class LineDelivery implements Delivery {
     // carries no reply token → push-only (README question 1 for Ray).
     // Exactly ONE request per send(), never auto-retried (§6.2); upstream
     // decides what to do with `retryable`. send() never throws (§6.6).
-    const textMessage = { type: "text", text: message.text };
+    type LineOutboundMessage =
+      | { type: "text"; text: string }
+      | { type: "image"; originalContentUrl: string; previewImageUrl: string }
+      | { type: "audio"; originalContentUrl: string; duration: number };
+    const textMessage: LineOutboundMessage = { type: "text", text: message.text };
+    const messages: LineOutboundMessage[] = [textMessage];
+    if (imageMessage) messages.push(imageMessage);
+    if (audioMessage) messages.push(audioMessage);
     const payload = {
       to: target.channelUserId,
-      messages: audioMessage ? [textMessage, audioMessage] : [textMessage],
+      messages,
     };
 
     let response: Response;

@@ -16,7 +16,7 @@ export default function RootLayout({
     // Traditional Chinese, and a base size set for presbyopia rather than for
     // density — the person this was designed around needs large type.
     <html lang="zh-Hant-TW" className="h-full antialiased text-[17px]">
-      <body className="flex min-h-full flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <body className="flex min-h-full flex-col">
         {children}
       </body>
     </html>

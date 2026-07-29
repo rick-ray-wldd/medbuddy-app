@@ -68,6 +68,15 @@ describe("the caregiver's menu", () => {
   it("does not offer bag OCR, which is specified and not built", () => {
     expect(CAREGIVER_CELLS.map((c) => c.label)).not.toContain("拍藥袋");
   });
+
+  it("shows one fixed care subject instead of offering a subject switcher", () => {
+    const subjectCell = CAREGIVER_CELLS.find((cell) => cell.data === "action=subjects");
+    expect(subjectCell).toMatchObject({
+      label: "照顧對象",
+      sub: "父親 · 固定配對",
+    });
+    expect(subjectCell?.sub).not.toContain("切換");
+  });
 });
 
 describe("every cell is wired to something", () => {

@@ -55,6 +55,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.LINE_RICH_MENU_ELDER_ID;
   delete process.env.LINE_RICH_MENU_CAREGIVER_ID;
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -85,6 +86,36 @@ describe("answering the card", () => {
       { roleStore: store, setup },
     );
     expect(links).toEqual([{ userId: "U-father", richMenuId: "rm-elder" }]);
+  });
+
+  it("always records either phone against the one demo subject", async () => {
+    vi.stubEnv("LINE_DEMO_SUBJECT_ID", "subj-father");
+    vi.stubEnv("LINE_USER_SUBJECT_MAP", "U-daughter:subj-mother");
+    const { setup } = fakeSetup();
+
+    await handleInbound(
+      msg({ kind: "postback", data: "action=bind&role=caregiver" }, "U-daughter"),
+      { roleStore: store, setup },
+    );
+
+    expect(await store.get("U-daughter")).toMatchObject({
+      role: "caregiver",
+      subjectId: "subj-father",
+    });
+  });
+
+  it("does not let a third phone take a configured demo role", async () => {
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "U-father");
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
+    const { setup, links } = fakeSetup();
+
+    await handleInbound(
+      msg({ kind: "postback", data: "action=bind&role=elder" }, "U-third-phone"),
+      { roleStore: store, setup },
+    );
+
+    expect(await store.get("U-third-phone")).toBeNull();
+    expect(links).toEqual([]);
   });
 
   it("refuses a crafted postback that would move an elder to the caregiver menu", async () => {
@@ -196,6 +227,23 @@ describe("menu presses", () => {
     }
   });
 
+  it("找家人 reaches the one configured caregiver phone", async () => {
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
+    const { delivery, calls } = fakeDelivery();
+    const { setup } = fakeSetup();
+
+    await handleInbound(
+      msg({ kind: "postback", data: "action=reach_family" }, "U-father"),
+      { roleStore: store, delivery, setup },
+    );
+
+    expect(calls.map((call) => call.target.channelUserId)).toEqual([
+      "U-daughter",
+      "U-father",
+    ]);
+    expect(calls[0].target.role).toBe("caregiver");
+  });
+
   it("an unrecognised press says nothing", async () => {
     const { delivery, calls } = fakeDelivery();
     const { setup } = fakeSetup();
@@ -203,6 +251,18 @@ describe("menu presses", () => {
       msg({ kind: "postback", data: "action=definitely_not_a_thing" }, "U-father"),
       { roleStore: store, delivery, setup },
     );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not let an elder invoke a caregiver-only menu action", async () => {
+    const { delivery, calls } = fakeDelivery();
+    const { setup } = fakeSetup();
+
+    await handleInbound(
+      msg({ kind: "postback", data: "action=subjects" }, "U-father"),
+      { roleStore: store, delivery, setup },
+    );
+
     expect(calls).toHaveLength(0);
   });
 

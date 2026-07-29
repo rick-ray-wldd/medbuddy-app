@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { SeededSubject } from "@/lib/subjects";
-import { CONDITION_LABELS } from "@/lib/subjects";
 import type { Verdict } from "@/lib/verdict/types";
 import type { Narration, NarrationAudience } from "@/lib/narration/types";
 import type { ItemSource } from "@/lib/grounding/types";
@@ -19,7 +18,7 @@ const SOURCE_LABELS: Record<ItemSource, string> = {
 type CheckResponse = { verdict: Verdict; narration: Narration };
 
 function toLines(subject: SeededSubject): string {
-  return subject.cupboard.map((c) => `${c.text} | ${c.source}`).join("\n");
+  return subject.cupboard.map((item) => `${item.text} | ${item.source}`).join("\n");
 }
 
 function parseLines(text: string) {
@@ -28,7 +27,7 @@ function parseLines(text: string) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [name, source] = line.split("|").map((p) => p.trim());
+      const [name, source] = line.split("|").map((part) => part.trim());
       const known = (Object.keys(SOURCE_LABELS) as ItemSource[]).includes(
         source as ItemSource,
       );
@@ -36,9 +35,8 @@ function parseLines(text: string) {
     });
 }
 
-export default function CheckClient({ subjects }: { subjects: SeededSubject[] }) {
-  const [subject, setSubject] = useState(subjects[0]);
-  const [text, setText] = useState(toLines(subjects[0]));
+export default function CheckClient({ subject }: { subject: SeededSubject }) {
+  const [text, setText] = useState(() => toLines(subject));
   const [audience, setAudience] = useState<NarrationAudience>("caregiver");
   const [result, setResult] = useState<CheckResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,7 +46,7 @@ export default function CheckClient({ subjects }: { subjects: SeededSubject[] })
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/check", {
+      const response = await fetch("/api/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -57,122 +55,167 @@ export default function CheckClient({ subjects }: { subjects: SeededSubject[] })
           audience: next,
         }),
       });
-      if (!res.ok) throw new Error(`伺服器回應 ${res.status}`);
-      setResult(await res.json());
-    } catch (e) {
-      // Nothing is shown rather than something wrong.
-      setError(e instanceof Error ? e.message : "核對失敗");
+      if (!response.ok) throw new Error(`伺服器回應 ${response.status}`);
+      setResult(await response.json());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "核對失敗");
       setResult(null);
     } finally {
       setBusy(false);
     }
   }
 
-  function pick(next: SeededSubject) {
-    setSubject(next);
-    setText(toLines(next));
+  function changeAudience(next: NarrationAudience) {
+    if (next === audience || busy) return;
+    setAudience(next);
+    void run(next);
+  }
+
+  function replaceMedicationText(next: string) {
+    setText(next);
+    setResult(null);
+  }
+
+  function appendMedicationText(said: string) {
+    setText((current) => (current ? `${current}\n${said}` : said));
     setResult(null);
   }
 
   return (
-    <div className="space-y-7">
-      <section>
-        <h2 className="mb-2 font-medium">這是誰的藥</h2>
-        {/* A carer may hold one parent or twelve residents. Which person this
-            is about is a choice, never an assumption. */}
-        <div className="flex flex-wrap gap-2">
-          {subjects.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => pick(s)}
-              className={`rounded-lg border px-4 py-2 transition ${
-                s.id === subject.id
-                  ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                  : "border-neutral-300 hover:border-neutral-500 dark:border-neutral-700"
-              }`}
-            >
-              {s.displayName}
-              <span className="ml-2 text-sm opacity-70">{s.ageYears} 歲</span>
-            </button>
-          ))}
-        </div>
-        <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">
-          已記錄的狀況:
-          {subject.conditions.length === 0
-            ? "(無)"
-            : subject.conditions.map((c) => CONDITION_LABELS[c]).join("、")}
-        </p>
-      </section>
-
-      <section>
-        <label htmlFor="cupboard" className="mb-2 block font-medium">
-          櫃子裡有什麼
-        </label>
-        <p className="mb-2 text-sm text-neutral-600 dark:text-neutral-400">
-          一行一項。處方藥、自己買的、上次剩的、鄰居給的 —— 都寫進來,
-          因為醫師看得到的只有處方。
-        </p>
-        <textarea
-          id="cupboard"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={6}
-          spellCheck={false}
-          className="w-full rounded-lg border border-neutral-300 bg-transparent p-3 font-mono text-[15px] leading-relaxed outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-300"
-        />
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          {/* Speaking a medicine name is easier than typing one, and on a phone
-              it is much easier. Each utterance becomes its own line. */}
-          <DictateButton
-            label="按住唸出品名"
-            onText={(said) => setText((t) => (t ? `${t}\n${said}` : said))}
-          />
-          <button
-            onClick={() => run()}
-            disabled={busy}
-            className="rounded-lg bg-neutral-900 px-5 py-2.5 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-          >
-            {busy ? "核對中…" : "核對"}
-          </button>
-          {error && <span className="text-sm text-red-600">{error}</span>}
-        </div>
-      </section>
-
-      {result && (
-        <>
-          {/* Reporting is the caregiver's, never the older adult's. A review
-              found this rendered beside both views, offering him 漏服 to tick —
-              which is precisely the admission the product promises never to
-              ask him for. */}
-          {audience === "caregiver" && <Observe subjectId={subject.id} />}
-          <Result
-          data={result}
-          audience={audience}
-            onAudience={(a) => {
-              setAudience(a);
-              void run(a);
-            }}
-          />
-          <div className="flex flex-wrap items-center gap-3">
-            <a
-              href={`/summary/${subject.id}`}
-              className="inline-block rounded-lg border border-neutral-900 px-5 py-2.5 font-medium dark:border-neutral-100"
-            >
-              產生回診單 →
-            </a>
-            <SendToLine subjectId={subject.id} itemsText={text} />
+    <div className="workspace-grid">
+      <div className="workspace-main">
+        <section className="medical-card" aria-labelledby="medication-input-heading">
+          <div className="card-heading">
+            <div>
+              <span className="step-label">STEP 01</span>
+              <h2 id="medication-input-heading" className="card-title">
+                建立完整用藥清單
+              </h2>
+              <p className="card-description">
+                處方藥、自己購買的藥、保健食品與剩藥都要列入。每行一項，直線後方標記來源。
+              </p>
+            </div>
+            <span className="fixed-subject-chip">固定對象：{subject.displayName}</span>
           </div>
-        </>
-      )}
+
+          <label htmlFor="cupboard" className="field-label">
+            家中實際使用的藥品
+          </label>
+          <div className="source-legend" aria-label="可用的用藥來源代碼">
+            {(Object.entries(SOURCE_LABELS) as Array<[ItemSource, string]>).map(
+              ([code, label]) => (
+                <span key={code}>{code} = {label}</span>
+              ),
+            )}
+          </div>
+          <textarea
+            id="cupboard"
+            value={text}
+            onChange={(event) => replaceMedicationText(event.target.value)}
+            rows={7}
+            spellCheck={false}
+            className="medication-input"
+            aria-describedby="medication-format-hint"
+          />
+          <p id="medication-format-hint" className="mt-2 text-sm text-[var(--muted)]">
+            範例：普拿疼膜衣錠500毫克 | otc
+          </p>
+          <div className="card-actions">
+            <DictateButton
+              label="按住唸出品名"
+              onText={appendMedicationText}
+            />
+            <button
+              type="button"
+              onClick={() => void run()}
+              disabled={busy || parseLines(text).length === 0}
+              className="primary-action"
+            >
+              {busy ? "正在核對資料…" : "開始用藥核對"}
+            </button>
+            <span className={`inline-status${error ? " error" : ""}`} role="status">
+              {error ?? "不確定的項目會被標出，不會自動猜測。"}
+            </span>
+          </div>
+        </section>
+
+        {result ? (
+          <>
+            <Result
+              data={result}
+              audience={audience}
+              busy={busy}
+              onAudience={changeAudience}
+            />
+            {audience === "caregiver" ? <Observe subjectId={subject.id} /> : null}
+            <Handoff subjectId={subject.id} itemsText={text} />
+          </>
+        ) : null}
+      </div>
+
+      <aside className="workspace-aside" aria-label="Demo 流程與安全邊界">
+        <DemoFlow />
+        <section className="medical-card safety-card">
+          <h2>安全邊界</h2>
+          <p>
+            MedBuddy 不診斷、不決定停藥或改藥，也不把模糊品名當成已辨識。高風險與不確定內容只會升級給藥師或醫師確認。
+          </p>
+        </section>
+      </aside>
     </div>
   );
 }
 
-/**
- * The caregiver-initiated LINE delivery (the one sanctioned outbound). The
- * server re-runs the pipeline and sends the elder-audience narration — this
- * button carries the subject and items, never composed text.
- */
+function DemoFlow() {
+  const steps = [
+    ["完整列藥", "照顧者補上診間看不到的成藥、保健食品與剩藥"],
+    ["資料核對", "只用登記資料與版本化規則產生結構化 verdict"],
+    ["記錄觀察", "把症狀、漏服與自行用藥保留成照顧者原話"],
+    ["交接照護", "產生回診摘要，或把長者版說明送到固定 LINE 帳號"],
+  ] as const;
+
+  return (
+    <section className="medical-card">
+      <p className="eyebrow">DEMO WORKFLOW</p>
+      <h2 className="card-title">一條可講清楚的照護流程</h2>
+      <div className="flow-list">
+        {steps.map(([title, description], index) => (
+          <div className="flow-item" key={title}>
+            <span className="flow-index">0{index + 1}</span>
+            <div>
+              <strong>{title}</strong>
+              <span>{description}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Handoff({ subjectId, itemsText }: { subjectId: string; itemsText: string }) {
+  return (
+    <section className="medical-card handoff-band" aria-labelledby="handoff-heading">
+      <div className="card-heading">
+        <div>
+          <span className="step-label">STEP 04</span>
+          <h2 id="handoff-heading" className="card-title">完成照護交接</h2>
+          <p className="card-description">
+            回診單給醫師快速審閱；LINE 說明固定傳到本次 Demo 的長者手機。
+          </p>
+        </div>
+      </div>
+      <div className="handoff-actions">
+        <a href={`/summary/${subjectId}`} className="secondary-action">
+          查看回診摘要
+        </a>
+        <SendToLine subjectId={subjectId} itemsText={itemsText} />
+      </div>
+    </section>
+  );
+}
+
+/** The only caregiver-initiated outbound message in the demo. */
 function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: string }) {
   const [state, setState] = useState<"idle" | "busy" | "sent" | "failed">("idle");
   const [reason, setReason] = useState<string | null>(null);
@@ -181,7 +224,7 @@ function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: st
     setState("busy");
     setReason(null);
     try {
-      const res = await fetch("/api/line/deliver", {
+      const response = await fetch("/api/line/deliver", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -190,12 +233,14 @@ function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: st
           audience: "elder",
         }),
       });
-      const data = (await res.json()) as { delivery?: { ok: boolean; reason?: string } };
-      if (res.ok && data.delivery?.ok) {
+      const data = (await response.json()) as {
+        delivery?: { ok: boolean; reason?: string };
+      };
+      if (response.ok && data.delivery?.ok) {
         setState("sent");
       } else {
         setState("failed");
-        setReason(data.delivery?.reason ?? `伺服器回應 ${res.status}`);
+        setReason(data.delivery?.reason ?? `伺服器回應 ${response.status}`);
       }
     } catch {
       setState("failed");
@@ -204,58 +249,69 @@ function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: st
   }
 
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex flex-wrap items-center gap-2">
       <button
-        onClick={send}
+        type="button"
+        onClick={() => void send()}
         disabled={state === "busy"}
-        className="rounded-lg border border-neutral-900 px-5 py-2.5 font-medium disabled:opacity-50 dark:border-neutral-100"
+        className="primary-action"
       >
-        {state === "busy" ? "傳送中…" : state === "sent" ? "已傳到 LINE ✓" : "傳到 LINE"}
+        {state === "busy"
+          ? "正在傳送…"
+          : state === "sent"
+            ? "已傳到長者 LINE ✓"
+            : "傳到長者 LINE"}
       </button>
-      {state === "failed" && (
-        <span className="text-sm text-red-600">傳送失敗:{reason}</span>
-      )}
+      <span className={`inline-status${state === "failed" ? " error" : ""}`} role="status">
+        {state === "failed" ? `傳送失敗：${reason}` : ""}
+      </span>
     </span>
   );
 }
 
-/**
- * Somewhere to put what the family noticed.
- *
- * There is no equivalent for the older adult, and that is the design: he is
- * never asked to confirm or deny anything, so an observation has one possible
- * author.
- */
 function Observe({ subjectId }: { subjectId: string }) {
   const [note, setNote] = useState("");
   const [kind, setKind] = useState("symptom");
+  const [state, setState] = useState<"idle" | "busy" | "saved" | "failed">("idle");
   const [saved, setSaved] = useState<string | null>(null);
 
   async function save() {
-    if (!note.trim()) return;
-    const res = await fetch("/api/observation", {
+    const trimmed = note.trim();
+    if (!trimmed) return;
+    setState("busy");
+    const response = await fetch("/api/observation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subjectId, kind, note }),
-    });
-    if (res.ok) {
-      setSaved(note.trim());
+      body: JSON.stringify({ subjectId, kind, note: trimmed }),
+    }).catch(() => null);
+
+    if (response?.ok) {
+      setSaved(trimmed);
       setNote("");
+      setState("saved");
+    } else {
+      setState("failed");
     }
   }
 
   return (
-    <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <h3 className="mb-2 font-medium">你注意到什麼</h3>
-      <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
-        會出現在回診單上。用你自己的話寫,越具體越有用 ——
-        「上樓梯到二樓開始喘」比「最近比較累」醫師更用得上。
-      </p>
-      <div className="flex flex-wrap gap-2">
+    <section className="medical-card" aria-labelledby="observation-heading">
+      <div className="card-heading">
+        <div>
+          <span className="step-label">STEP 03</span>
+          <h2 id="observation-heading" className="card-title">記錄照顧觀察</h2>
+          <p className="card-description">
+            用具體原話記下症狀、漏服或自行用藥，內容會進入回診摘要，不會被改寫成診斷。
+          </p>
+        </div>
+      </div>
+      <div className="observation-form">
+        <label className="sr-only" htmlFor="observation-kind">觀察類型</label>
         <select
+          id="observation-kind"
           value={kind}
-          onChange={(e) => setKind(e.target.value)}
-          className="rounded-lg border border-neutral-300 bg-transparent px-3 py-2 dark:border-neutral-700"
+          onChange={(event) => setKind(event.target.value)}
+          className="form-control"
         >
           <option value="symptom">症狀</option>
           <option value="self_medication">自行用藥</option>
@@ -263,25 +319,33 @@ function Observe({ subjectId }: { subjectId: string }) {
           <option value="missed_dose">漏服</option>
           <option value="other">其他</option>
         </select>
+        <label className="sr-only" htmlFor="observation-note">照顧觀察內容</label>
         <input
+          id="observation-note"
           value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void save()}
-          placeholder="晚上腰痛,自己拿了櫃子裡的止痛藥"
-          className="min-w-[16rem] flex-1 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-300"
+          onChange={(event) => setNote(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void save();
+          }}
+          placeholder="例如：晚上腰痛，自己拿了櫃子裡的止痛藥"
+          className="form-control note-input"
         />
         <button
+          type="button"
           onClick={() => void save()}
-          className="rounded-lg border border-neutral-900 px-4 py-2 dark:border-neutral-100"
+          disabled={!note.trim() || state === "busy"}
+          className="secondary-action"
         >
-          記錄
+          {state === "busy" ? "記錄中…" : "儲存觀察"}
         </button>
       </div>
-      {saved && (
-        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-          已記錄:{saved}
-        </p>
-      )}
+      <p className={`mt-3 inline-status${state === "failed" ? " error" : ""}`} role="status">
+        {state === "saved" && saved
+          ? `已記錄：「${saved}」`
+          : state === "failed"
+            ? "記錄失敗，請稍後再試。"
+            : ""}
+      </p>
     </section>
   );
 }
@@ -289,198 +353,180 @@ function Observe({ subjectId }: { subjectId: string }) {
 function Result({
   data,
   audience,
+  busy,
   onAudience,
 }: {
   data: CheckResponse;
   audience: NarrationAudience;
-  onAudience: (a: NarrationAudience) => void;
+  busy: boolean;
+  onAudience: (audience: NarrationAudience) => void;
 }) {
   const { verdict, narration } = data;
 
   return (
-    <section className="space-y-5 border-t border-neutral-200 pt-7 dark:border-neutral-800">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Whose medicines these are, on the result itself. */}
-        <h2 className="text-xl font-semibold">{verdict.subject.displayName}的核對結果</h2>
-        <div className="flex gap-1 rounded-lg border border-neutral-300 p-1 dark:border-neutral-700">
-          {(["caregiver", "elder"] as const).map((a) => (
+    <section className="medical-card" aria-labelledby="result-heading">
+      <div className="card-heading">
+        <div>
+          <span className="step-label">STEP 02</span>
+          <h2 id="result-heading" className="card-title">
+            {verdict.subject.displayName}的核對結果
+          </h2>
+          <p className="card-description">
+            同一份結構化結果，依照顧者與長者的理解需求呈現不同語氣；醫療事實不變。
+          </p>
+        </div>
+        <div className="result-tabs" role="tablist" aria-label="結果閱讀角色">
+          {(["caregiver", "elder"] as const).map((next) => (
             <button
-              key={a}
-              onClick={() => onAudience(a)}
-              className={`rounded px-3 py-1 text-sm ${
-                a === audience
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                  : ""
-              }`}
+              type="button"
+              role="tab"
+              aria-selected={next === audience}
+              aria-controls="result-panel"
+              id={`result-tab-${next}`}
+              key={next}
+              disabled={busy}
+              onClick={() => onAudience(next)}
             >
-              {a === "caregiver" ? "子女看到的" : "長輩看到的"}
+              {next === "caregiver" ? "照顧者詳細版" : "長者 LINE 預覽"}
             </button>
           ))}
         </div>
       </div>
 
-      {audience === "elder" && <AskBox />}
-
-      <Coverage verdict={verdict} />
-
-      <div className="space-y-3">
-        {narration.segments.map((segment, i) => (
-          <SegmentView key={i} segment={segment} />
-        ))}
+      <div
+        id="result-panel"
+        role="tabpanel"
+        aria-labelledby={`result-tab-${audience}`}
+        className="grid gap-5"
+      >
+        {audience === "elder" ? (
+          <p className="channel-hint">
+            這裡預覽長者會在 LINE 收到的簡明說明；長者可直接輸入藥名詢問，並使用「再唸一次」播放最近的說明。
+          </p>
+        ) : null}
+        <Coverage verdict={verdict} />
+        <div className="narration-stack">
+          {narration.segments.map((segment, index) => (
+            <SegmentView key={`${segment.kind}-${index}`} segment={segment} />
+          ))}
+        </div>
+        <div className="card-actions">
+          <SpeakButton
+            text={narration.segments.map((segment) => segment.text).join("。")}
+            label="朗讀這份說明"
+          />
+        </div>
+        <Provenance verdict={verdict} />
       </div>
-
-      {/* Reading it out is not a convenience here. The person this is written
-          for has presbyopia, and hearing it is how he takes it in. */}
-      <SpeakButton text={narration.segments.map((s) => s.text).join("。")} />
-
-      <Provenance verdict={verdict} />
-    </section>
-  );
-}
-
-/**
- * The one thing the older adult does.
- *
- * He asks. He is never asked to confirm or deny anything, so this is a
- * question box and there is nothing here to tick.
- */
-function AskBox() {
-  const [question, setQuestion] = useState("");
-  return (
-    <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <h3 className="mb-2 text-lg font-medium">想問什麼就問</h3>
-      <div className="flex flex-wrap items-center gap-2">
-        <DictateButton label="按住問問題" onText={setQuestion} />
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="這顆白色的是幹嘛的?"
-          className="min-w-[14rem] flex-1 rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-lg outline-none focus:border-neutral-900 dark:border-neutral-700"
-        />
-      </div>
-      {question && (
-        <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-          聽到了:「{question}」—— 回答功能還沒接上,這一版先把問題留在畫面上。
-        </p>
-      )}
     </section>
   );
 }
 
 function Coverage({ verdict }: { verdict: Verdict }) {
   const { itemsSubmitted, itemsResolved, itemsUnresolved } = verdict.coverage;
-  const unresolved = verdict.items.filter((i) => !i.resolved);
+  const unresolved = verdict.items.filter((item) => !item.resolved);
 
   return (
-    <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-      <p>
-        送出 <strong>{itemsSubmitted}</strong> 項 · 辨識出{" "}
-        <strong>{itemsResolved}</strong> 項 · 無法辨識{" "}
-        <strong>{itemsUnresolved}</strong> 項
-      </p>
-      {unresolved.length > 0 && (
-        <ul className="mt-2 space-y-1 text-neutral-600 dark:text-neutral-400">
-          {unresolved.map((item, i) => (
-            <li key={i}>
-              「{item.inputText}」—{" "}
-              {item.resolved
-                ? null
-                : item.reason === "ambiguous"
-                  ? "名稱不夠明確,可能是下列其中一項"
-                  : item.reason === "matched_without_ingredients"
-                    ? "查得到這個品名,但登記沒有記載成分"
-                    : "任何登記都查不到"}
-              {/* Declining to choose is only half of it. The candidates are in
-                  the verdict, and a person holding the box can tell them apart
-                  where we cannot. */}
-              {!item.resolved && item.candidates && item.candidates.length > 0 && (
-                <ul className="ml-4 mt-1 list-disc text-neutral-500">
-                  {item.candidates.map((c) => (
-                    <li key={c.permit}>
-                      {c.nameZh}
-                      <span className="ml-1 text-xs">({c.permit})</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {itemsUnresolved > 0 && (
-        <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-          這幾項不在這次核對的範圍內。台灣的「健康食品」是法定登記類別,
-          家裡常見的保健食品多半沒有登記,也就查不到 —— 那正是醫師看不見的部分。
-        </p>
-      )}
+    <div>
+      <div className="coverage-grid" aria-label="本次資料覆蓋率">
+        <div className="coverage-metric">
+          <span>送出項目</span>
+          <strong>{itemsSubmitted}</strong>
+        </div>
+        <div className="coverage-metric">
+          <span>成功辨識</span>
+          <strong>{itemsResolved}</strong>
+        </div>
+        <div className={`coverage-metric${itemsUnresolved > 0 ? " warning" : ""}`}>
+          <span>需要確認</span>
+          <strong>{itemsUnresolved}</strong>
+        </div>
+      </div>
+
+      {unresolved.length > 0 ? (
+        <div className="unresolved-panel">
+          <strong>以下項目未納入安全判斷，請保留包裝並交由藥師確認：</strong>
+          <ul>
+            {unresolved.map((item, index) => (
+              <li key={`${item.inputText}-${index}`}>
+                「{item.inputText}」— {unresolvedReason(item)}
+                {item.candidates && item.candidates.length > 0 ? (
+                  <ul>
+                    {item.candidates.map((candidate) => (
+                      <li key={candidate.permit}>
+                        {candidate.nameZh}（{candidate.permit}）
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2">
+            台灣「健康食品」是法定登記類別；一般保健食品可能沒有登記，因此查不到不代表安全或不安全。
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/**
- * The seam, made visible.
- *
- * A reader has to be able to tell what a regulator or a published criterion
- * said from what this product wrote. Quoted text is set apart and attributed;
- * everything else is plainly ours.
- */
+function unresolvedReason(item: Verdict["items"][number]): string {
+  if (item.resolved) return "";
+  if (item.reason === "ambiguous") return "名稱不夠明確，可能對應多個品項";
+  if (item.reason === "matched_without_ingredients") {
+    return "找到登記品名，但登記資料沒有記載成分";
+  }
+  return "目前登記資料中查不到";
+}
+
 function SegmentView({ segment }: { segment: Narration["segments"][number] }) {
   if (segment.kind === "verified") {
     return (
-      <figure className="rounded-lg border-l-4 border-emerald-600 bg-emerald-50/60 p-4 dark:bg-emerald-950/25">
-        <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-          原文引用 · 未經改寫
-        </div>
-        <blockquote className="whitespace-pre-wrap leading-relaxed">
-          {segment.text}
-        </blockquote>
-        {segment.attribution && (
-          <figcaption className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
-            出處:{segment.attribution}
-          </figcaption>
-        )}
+      <figure className="narration-segment narration-verified">
+        <div className="segment-label">原文引用 · 未經改寫</div>
+        <blockquote className="whitespace-pre-wrap">{segment.text}</blockquote>
+        {segment.attribution ? (
+          <figcaption className="segment-attribution">出處：{segment.attribution}</figcaption>
+        ) : null}
       </figure>
     );
   }
 
   if (segment.kind === "action") {
-    return (
-      <p className="rounded-lg border border-neutral-900 px-4 py-3 font-medium dark:border-neutral-100">
-        {segment.text}
-      </p>
-    );
+    return <p className="narration-segment narration-action">{segment.text}</p>;
   }
 
   if (segment.kind === "coverage") {
     return (
-      <p className="rounded-lg bg-amber-50 px-4 py-3 text-[15px] leading-relaxed text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+      <p className="narration-segment narration-coverage">
         {segment.text}
-        {segment.attribution && (
-          <span className="mt-1 block text-xs opacity-75">{segment.attribution}</span>
-        )}
+        {segment.attribution ? (
+          <span className="segment-attribution block">{segment.attribution}</span>
+        ) : null}
       </p>
     );
   }
 
-  return <p className="px-1 leading-relaxed">{segment.text}</p>;
+  return <p className="narration-segment bg-[var(--surface-soft)]">{segment.text}</p>;
 }
 
 function Provenance({ verdict }: { verdict: Verdict }) {
   return (
-    <details className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-      <summary className="cursor-pointer font-medium">這次核對用了什麼版本</summary>
-      <ul className="mt-3 space-y-1 text-neutral-600 dark:text-neutral-400">
-        <li>藥品登記擷取於 {verdict.provenance.registers.drugs}</li>
-        <li>健康食品登記擷取於 {verdict.provenance.registers.healthFoods}</li>
-        {verdict.provenance.ruleSets.map((r) => (
-          <li key={r.id}>
-            {r.id} · {r.version}
-          </li>
-        ))}
-        {verdict.provenance.skippedRuleSets.map((r) => (
-          <li key={r.id}>已跳過 {r.id}:{r.reason}</li>
-        ))}
-      </ul>
+    <details className="source-disclosure">
+      <summary>檢視本次核對版本</summary>
+      <div className="source-content">
+        <ul>
+          <li>藥品登記擷取於 {verdict.provenance.registers.drugs}</li>
+          <li>健康食品登記擷取於 {verdict.provenance.registers.healthFoods}</li>
+          {verdict.provenance.ruleSets.map((rule) => (
+            <li key={rule.id}>{rule.id} · {rule.version}</li>
+          ))}
+          {verdict.provenance.skippedRuleSets.map((rule) => (
+            <li key={rule.id}>已跳過 {rule.id}：{rule.reason}</li>
+          ))}
+        </ul>
+      </div>
     </details>
   );
 }

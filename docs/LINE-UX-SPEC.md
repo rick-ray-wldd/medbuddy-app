@@ -4,8 +4,33 @@
 > `VOICE-DELIVERY-SPEC.md` governs what is spoken; this one governs what the
 > two people see and can touch.
 >
-> Status: design. The message plumbing exists; none of the rich menus, quick
-> replies or LIFF described here are built.
+> Status: current demo contract. The role card, both rich menus, webhook,
+> persistence, and menu actions are built. Quick replies, STT, and LIFF are not.
+
+---
+
+## Demo contract — exactly two LINE phones
+
+The challenge demo uses one LINE Official Account and two different LINE user
+accounts:
+
+| Phone | Card choice | Persisted binding | Rich menu | Subject |
+| --- | --- | --- | --- | --- |
+| A | `我是長輩` | `elder` | `medbuddy-elder` | `subj-father` |
+| B | `我是照顧者` | `caregiver` | `medbuddy-caregiver` | `subj-father` |
+
+The choice is a server-side `RoleBinding`, not client-only UI state. The
+deployment sets `LINE_DEMO_ELDER_USER_ID` and
+`LINE_DEMO_CAREGIVER_USER_ID`; when both are configured, no third phone may
+claim either role. Both ids must differ. The web dashboard, LINE messages,
+observations, questions, clinician summary, `找家人`, and QR delivery all use
+the same `subj-father` record.
+
+There is no subject switcher, pairing code, roster administration, multi-elder
+support, or multi-caregiver permission model in this demo. Those are future
+product scope. Vercel Blob persists the two role records for the prototype, but
+its cross-instance consistency is not strong enough to make it the production
+authorization store.
 
 ---
 
@@ -96,13 +121,11 @@ the person, not of the session:
 Postback actions carry the choice, so the answer does not appear in the thread
 as a message he has to see or scroll past.
 
-### Two people, one phone
+### Two people, two phones, one caregiver-led setup
 
-The in-person setup in §4 assumes the caregiver is holding the elder's phone.
-So the caregiver will answer this card **twice** — once on each device — and
-the elder may never see it at all. That is the intended path, not a
-workaround: he cannot onboard himself, and the design says so rather than
-hoping.
+The in-person setup in §4 assumes the caregiver can help with the elder's phone.
+The card is answered **once on each device**: 長輩 on phone A and 照顧者 on phone
+B. The choice immediately writes the binding and links that account's menu.
 
 ---
 
@@ -113,9 +136,9 @@ interface to each role. That is how "one record, three projections" is
 expressed here — and the clinician, who is not a LINE participant at all, is
 simply absent.
 
-Switching between them uses the same mechanism LINE bots already use for a
-副選單 — the pattern is well-trodden; what is unusual here is that the two
-menus belong to two *people* rather than two sections.
+The menus belong to two *people*, not two sections of one person's interface.
+The caregiver's 切換身分 action exists only as setup recovery; an elder binding
+is terminal and cannot enter the caregiver surface.
 
 ### Elder — a 2×2 menu, four large targets
 
@@ -125,12 +148,12 @@ Everything on it **gives him something**. Nothing on it asks him for anything.
 ┌─────────────────────┬─────────────────────┐
 │                     │                     │
 │      我的藥          │     這顆是什麼       │
-│   (今天在吃什麼)      │  (拍照或用說的)      │
+│   (今天在吃什麼)      │  (用說的或打字)      │
 │                     │                     │
 ├─────────────────────┼─────────────────────┤
 │                     │                     │
 │     再唸一次         │      找家人          │
-│   (剛剛那則語音)      │  (傳個訊息給小明)     │
+│   (最近核對說明)      │  (通知固定照顧者)      │
 │                     │                     │
 └─────────────────────┴─────────────────────┘
 ```
@@ -142,10 +165,10 @@ arm's length. Each cell is roughly a thumb.
 costume. If he wants to tell someone something, 找家人 lets him do it in his own
 words, which is his choice rather than our question.
 
-**Why 再唸一次 is its own button.** The reply arrives as text plus audio. Audio
-in LINE has to be tapped to play, and a tap that misses scrolls the thread
-instead. A permanent button that replays the last explanation removes the need
-to find the bubble again.
+**Why 再唸一次 is its own button.** It re-narrates the most recent medication
+snapshot for the elder role. When a pre-rendered speech match exists, the same
+push also includes audio. It is not a byte-for-byte replay of the last chat
+bubble, so the label must not promise that.
 
 **Icons beside every label.** Health-account rich menus in Taiwan carry an icon
 per cell, and the reason is not decoration: an icon is recognised faster than a
@@ -159,15 +182,16 @@ top. Depth is the thing to spend on a caregiver and refuse an elder.
 
 ```
 ┌────────────┬────────────┬────────────┐
-│  拍藥袋     │  記一件事   │  產生回診單  │
+│  記一件事   │  產生回診單  │ 他問了什麼   │
 ├────────────┼────────────┼────────────┤
-│ 爸問了什麼  │  傳說明給他  │   開啟網頁   │
+│  照顧對象   │   開啟網頁   │  切換身分    │
 └────────────┴────────────┴────────────┘
 ```
 
-`開啟網頁` opens the full web surface in a LIFF webview — the caregiver already
-has a complete interface on the web, and rebuilding it out of LINE messages
-would be strictly worse. **This asymmetry is not laziness: `LINE-ADAPTER-SPEC`
+`照顧對象` reports the one fixed father record and offers no switch. `開啟網頁`
+opens the deployed caregiver dashboard in LINE's browser (not LIFF in this
+build); rebuilding the full dashboard out of chat messages would be strictly
+worse. **This asymmetry is intentional: `LINE-ADAPTER-SPEC`
 §6.1 forbids sending the older adult a link because he taps links without
 checking. The caregiver does not have that constraint, so he gets the webview
 and the elder never does.**
@@ -237,19 +261,23 @@ easy to add by accident because LINE makes it convenient.
 
 ## 4. Setup happens in person, once
 
-He cannot onboard himself, and pretending otherwise is how these products die
-at the first screen. The flow assumes the caregiver is holding his phone:
+For the review demo, setup is deliberately explicit and completed before the
+walkthrough:
 
-1. Caregiver adds the bot on **their own** phone, gets a pairing code
-2. Caregiver picks up the elder's phone, scans the QR, enters the code
-3. Caregiver sets the device font size while holding it — the one accessibility
-   change that matters and the one moment it will ever get made
-4. Caregiver sends one test message so the elder sees what an arriving
-   explanation looks like
+1. Put phone A and phone B's LINE User IDs into
+   `LINE_DEMO_ELDER_USER_ID` and `LINE_DEMO_CAREGIVER_USER_ID` on the same
+   Vercel project that serves the webhook.
+2. Add the same LINE Official Account on both phones.
+3. On phone A, tap **我是長輩**; verify the 2×2 elder menu appears.
+4. On phone B, tap **我是照顧者**; verify the 2×3 caregiver menu appears.
+5. Increase phone A's LINE/device font size and send one typed medicine-name
+   test so the arriving text/audio pattern is familiar.
+6. Open the web dashboard from phone B and run one medication check; both LINE
+   phones and the clinician summary must now refer to 父親.
 
-Recording this in the product rather than in an onboarding email is the point:
-step 3 is the difference between a readable product and an unused one, and
-nobody does it later.
+There is no pairing code in this build. The configured account allowlist plus
+the role-card confirmation is the temporary demo setup; an operator-grade
+pairing and recovery flow is future work.
 
 ---
 
@@ -282,25 +310,27 @@ what reaches his phone can only be rule-produced narration.
 ### He presses 找家人
 
 ```
-長輩  ──  找家人  ──▶  「要跟小明說什麼?按住說就好」
-長輩  ──  語音/文字 ──▶  轉給照顧者,原文不動
+長輩  ──  找家人  ──▶  固定通知送到照顧者手機
+照顧者                     ◀── 「父親按了『找家人』,想找您。」
+長輩                       ◀── 「好,我跟家人說了。」
 ```
 
-Passed through verbatim. This is the one path where the older adult originates
-content, and editing it would defeat the purpose.
+No typed or spoken clinical content is forwarded on this path. It is a fixed
+call-for-contact notification to the one configured caregiver.
 
 ---
 
 ## 6. What is built, and what this document is
 
 **Built:** inbound text → pipeline → reply; outbound caregiver-initiated
-delivery; audio hosting; signature, dedupe, verbatim delivery, link refusal.
+delivery; clinician-summary QR image delivery; audio hosting; signature,
+dedupe, verbatim delivery, link refusal; and fixed two-phone recipient routing.
 **The role card and both rich menus** — `follow` sends the card, a postback
 binds the role and links that role's menu, and the binding is stored
 (`src/lib/roles/`). Every cell on both menus is wired to an implemented action.
 
-**Not built:** the pairing flow (§4 step 2); STT for inbound voice; quick
-replies; the LIFF webview — 開啟網頁 currently opens the plain web surface.
+**Not built:** dynamic pairing/account recovery; STT for inbound voice; quick
+replies; the LIFF webview — 開啟網頁 currently opens the responsive web surface.
 拍藥袋 is absent from the caregiver's menu **on purpose**: bag OCR is specified
 in `docs/MEDICATION-BAG-OCR-MIGRATION.md` and not implemented, and a menu cell
 that does nothing reads to an older adult as *he* did something wrong.
@@ -324,6 +354,28 @@ user to be careful about providing personal information. On an account whose
 users are older adults — the population most targeted by fraud, and whose trust
 this product spends real design effort earning — that banner argues against us
 in our own thread. Verification has to happen before anyone real is invited.
+
+### Demo acceptance checklist
+
+1. Both phones add the same LINE Official Account and the webhook points to the
+   same Vercel project as `NEXT_PUBLIC_BASE_URL`.
+2. Phone A selects 長輩 and persists `elder -> subj-father`; phone B selects
+   照顧者 and persists `caregiver -> subj-father`.
+3. Each phone receives its own per-user rich menu after selection.
+4. With both demo User IDs configured, a third phone cannot claim either role.
+5. The caregiver web dashboard displays only 父親 and has no subject switcher.
+6. A web medication check is visible through the elder's 我的藥 action.
+7. A caregiver LINE observation appears in the same clinician summary.
+8. An elder text medicine question is answered and appears under 他問了什麼.
+9. 找家人 notifies only the configured caregiver account.
+10. 產生回診單 sends a real LINE image message; the QR opens the signed summary
+    for the same subject.
+11. Text interaction is required for the walkthrough. Browser speech is
+    demonstrated only on a supporting browser; LINE audio input is explicitly
+    described as recorded-without-STT.
+12. After changing rich-menu labels, run `npm run richmenu:render` and
+    `npm run richmenu:register`, then update the two Vercel menu ID variables
+    before the final walkthrough.
 
 This is a design specification, not a description of the product. Everything in
 it follows from constraints established in `docs/PRD.md` §3.2 and

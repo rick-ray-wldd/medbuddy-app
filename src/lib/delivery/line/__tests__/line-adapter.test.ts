@@ -658,6 +658,27 @@ describe("LineDelivery.send() push (§4, §7, §8)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("a clinician-summary QR is delivered as an image after its instruction text", async () => {
+    const { fetchMock, captured } = pushCapture(200, { sentMessages: [] });
+    const res = await deliveryWith(fetchMock).send(target("elder"), {
+      text: "王伯伯,到診間把下面這張圖拿給醫師掃描。",
+      imageUrl: "https://cdn.example.com/summary-qr.png",
+    });
+
+    expect(res).toEqual({ ok: true });
+    expect(JSON.parse(String(captured.init?.body))).toEqual({
+      to: "U-recipient",
+      messages: [
+        { type: "text", text: "王伯伯,到診間把下面這張圖拿給醫師掃描。" },
+        {
+          type: "image",
+          originalContentUrl: "https://cdn.example.com/summary-qr.png",
+          previewImageUrl: "https://cdn.example.com/summary-qr.png",
+        },
+      ],
+    });
+  });
+
   it("success response provides sentMessages[0].id → providerMessageId (string, per verified shape)", async () => {
     const { fetchMock } = pushCapture(200, {
       sentMessages: [{ id: "461230966842064897", quoteToken: "q..." }],

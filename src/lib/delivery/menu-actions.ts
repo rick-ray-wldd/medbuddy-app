@@ -83,10 +83,11 @@ export async function lastCheckNarration(
 
 /** Who a caregiver is currently responsible for. Names only; no findings. */
 export async function subjectRoster(): Promise<ActionReply> {
-  const { SUBJECTS } = await import("../subjects");
-  const lines = SUBJECTS.map((s) => `・${s.displayName}(${s.ageYears} 歲)`);
+  const { DEMO_SUBJECT } = await import("../subjects");
   return {
-    text: `目前照顧的對象:\n\n${lines.join("\n")}\n\n要切換對象請到網頁操作。`,
+    text:
+      `目前照顧的對象:\n\n・${DEMO_SUBJECT.displayName}(${DEMO_SUBJECT.ageYears} 歲)` +
+      "\n\n這次示範固定一位長者,不需要切換。",
     fromPipeline: false,
   };
 }

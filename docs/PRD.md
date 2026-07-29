@@ -8,6 +8,30 @@ Live: https://medbuddy-app.vercel.app · Source: this repository · Tests: `npm 
 
 ---
 
+## 0. Current demo contract (July 29, 2026)
+
+The review demo deliberately narrows the relationship model to one care pair:
+
+| Demo participant | Device | Role selection | Record used |
+| --- | --- | --- | --- |
+| Older adult | LINE phone A | taps **我是長輩** once | `subj-father` |
+| Caregiver | LINE phone B | taps **我是照顧者** once | the same `subj-father` |
+| Clinician | no account | scans or opens the reviewable summary | the same `subj-father` |
+
+The selected role is persisted as a `RoleBinding`, and LINE links the matching
+per-user rich menu. The web dashboard is the caregiver workspace and exposes no
+subject switcher. The two deployment recipients are configured as
+`LINE_DEMO_ELDER_USER_ID` and `LINE_DEMO_CAREGIVER_USER_ID`; when both are set,
+a third LINE account cannot claim either role.
+
+This is a scope decision, not a claim that caregiving is one-to-one. Multi-elder,
+multi-caregiver, facility rosters, self-service pairing, and role administration
+remain the target model after the challenge. They are intentionally excluded
+from the prototype so the evaluator can follow one medication record across two
+phones, the web dashboard, and the clinician handoff without hidden switching.
+
+---
+
 ## 1. Where this comes from
 
 My father has impaired liver function. I go with him to his follow-up
@@ -97,14 +121,13 @@ say *"I could not identify this"* rather than presenting a tidy list.
 
 ## 3. The three workflows
 
-One record, three role-scoped projections. The relationship between people is
-designed many-to-many — a father with two adult children who split the
-appointments, a facility carer responsible for twelve residents across a shift,
-someone caring for both parents at once. **That model is documented
-(`docs/DATA-MODEL.md`) but not yet implemented**: this build seeds three people
-and stamps a single carer id. What is enforced today is the part that matters
-most for safety — every finding carries its subject, and nothing renders
-without the name.
+One record, three role-scoped projections. The **current demo** is exactly one
+older adult and one caregiver attached to `subj-father`; both LINE phones and
+the web dashboard read and write that record. The broader many-to-many model —
+two siblings splitting appointments, a facility carer responsible for twelve
+residents, or one person caring for both parents — remains documented in
+`docs/DATA-MODEL.md` as the post-demo target. Every finding still carries its
+subject, and nothing renders without the name.
 
 ### 3.1 The caregiver — the first user, and the one who pays
 
@@ -118,7 +141,7 @@ work, badly, in their head.
 | Realise at the appointment they cannot remember | Bring one page |
 | Say the difficult parts out loud in front of their parent | Hand over a sheet |
 
-**Built:** subject selection, free-text intake with a source per line
+**Built:** a fixed-subject medical dashboard, free-text intake with a source per line
 (prescription / over the counter / leftover / supplement), the check, findings
 with the quoted source and its stated limits, coverage, provenance.
 
@@ -140,12 +163,12 @@ mark and never mentions a missed dose. Coverage is disclosed to him as well —
 *"there is one I could not identify"* is the system admitting its own limit, not
 asking him to admit anything.
 
-**Built:** hold-to-talk dictation and read-aloud, both on the device. A question
-box, because he speaks to ask — there is no control on his page for confirming
-or denying anything.
+**Built:** browser hold-to-talk for medication intake and on-device read-aloud;
+in LINE, a bound elder can type a medicine name and receive a grounded elder
+narration. The elder rich menu contains no adherence confirmation control.
 
-**Not built:** an answer. The question is recorded, not routed back through
-grounding. See §5.
+**Not built:** speech-to-text for an inbound LINE voice message. Audio input is
+recorded and deliberately not answered rather than guessed.
 
 ### 3.3 The clinician — a page, not a channel
 
@@ -225,22 +248,21 @@ It raises questions. It does not answer them.
 
 | Required by the brief | State |
 | --- | --- |
-| Voice-friendly **or highly accessible chat** interaction | **Partial.** Speech in and out on the device, hold-to-talk in the gesture he already uses, a question box with nothing to tick, large type. Still not a conversation: the question is recorded, not answered. The weakest of the four. |
+| Voice-friendly **or highly accessible chat** interaction | **Partial but runnable.** Browser hold-to-talk and read-aloud are built; LINE text questions are grounded and answered; LINE voice input is recorded but has no STT, so it receives no guessed answer. |
 | Explains purpose, timing and interactions with grounded data and clear limits | **Purpose and interactions built; timing is not.** The register's dosing text is not carried into the item model. This is still the strongest of the four. |
-| Structured medication / symptom / adherence log over time | **Built.** Snapshots on every check, observations in the carer's words, and the change between captures. In memory only — a restart loses it. |
+| Structured medication / symptom / adherence log over time | **Built for the demo.** Snapshots and observations use Vercel Blob when configured and memory locally. Blob is adequate for one sequential care pair, not concurrent facility writes; Postgres is the production migration. |
 | Clinician- or caregiver-reviewable summary, escalating rather than deciding | **Built.** `/summary/[subjectId]` renders the page a family hands over; escalation is a two-value enumeration checked when rule sets load. |
 
-Also declared: a LINE delivery adapter is **specified and interfaced but not
-implemented** (`docs/LINE-ADAPTER-SPEC.md`). A collaborator who knows the LINE
-Messaging API is building it to that spec; the path boundary is fixed so
-authorship stays unambiguous. If it does not land it ships as a documented,
-tested, unwired module — which is why delivery was put behind an interface in
-the first hour.
+The LINE delivery adapter is **implemented and offline-tested**
+(`src/lib/delivery/line/**`): webhook signature verification, deduplication,
+role binding, per-user rich menus, elder text questions, caregiver observations,
+caregiver-initiated elder delivery, signed audio delivery, and clinician-summary
+QR images. Browser and LINE write to the same `LogStore`.
 
-**Durable persistence is what remains.** The log exists and the surfaces read
-it, but the store is in memory: a restart loses everything, and a serverless
-deployment may not share a process between requests. Replacing it is one file,
-because everything above is written against a `LogStore` interface.
+What remains before a real rollout is authentication, transactional persistence,
+consent/retention policy, STT for LINE voice input, and an operator-grade pairing
+flow. Vercel Blob deliberately supports only this sequential two-phone demo;
+concurrent writes and cross-instance role consistency require a database.
 
 ---
 

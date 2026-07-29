@@ -21,6 +21,13 @@ export type SeededSubject = {
   cupboard: { text: string; source: "prescription" | "otc" | "supplement" | "leftover" }[];
 };
 
+/**
+ * The public demo intentionally has one clinical subject. Other seeded people
+ * remain below as engine fixtures, but no LINE role or dashboard control may
+ * switch away from this record during the two-phone demo.
+ */
+export const DEMO_SUBJECT_ID = "subj-father";
+
 export const SUBJECTS: SeededSubject[] = [
   {
     id: "subj-father",
@@ -54,6 +61,8 @@ export const SUBJECTS: SeededSubject[] = [
     cupboard: [{ text: "安佳錠", source: "prescription" }],
   },
 ];
+
+export const DEMO_SUBJECT = SUBJECTS.find((subject) => subject.id === DEMO_SUBJECT_ID)!;
 
 export function findSubject(id: string): SeededSubject | undefined {
   return SUBJECTS.find((s) => s.id === id);

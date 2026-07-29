@@ -27,6 +27,10 @@ import { FishVoiceProvider } from "@/lib/voice/fish";
 import { defaultVoice, findDemoVoice } from "@/lib/voice/profiles";
 import { LineDelivery } from "@/lib/delivery/line/LineDelivery";
 import { getLineConfig } from "@/lib/delivery/line/config";
+import {
+  getDemoLinePair,
+  recipientForDemoRole,
+} from "@/lib/delivery/line/demo-pair";
 import type { ItemSource } from "@/lib/grounding/types";
 import type { NarrationAudience } from "@/lib/narration/types";
 import type { DeliveryMessage } from "@/lib/delivery/types";
@@ -35,8 +39,6 @@ type Body = {
   subjectId?: string;
   items?: { text: string; source?: ItemSource }[];
   audience?: NarrationAudience;
-  /** LINE userId to deliver to; defaults to LINE_ELDER_USER_ID */
-  to?: string;
   /** Fish external voice id of a calibrated caregiver voice (optional) */
   voiceId?: string;
 };
@@ -57,10 +59,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "unknown subject" }, { status: 400 });
   }
 
-  const to = body.to?.trim() || process.env.LINE_ELDER_USER_ID;
+  const demoPair = getDemoLinePair();
+  if (subject.id !== demoPair.subjectId) {
+    return NextResponse.json(
+      { error: "the demo supports one fixed care subject" },
+      { status: 400 },
+    );
+  }
+
+  const to = recipientForDemoRole("elder");
   if (!to) {
     return NextResponse.json(
-      { error: "no recipient: pass `to` or set LINE_ELDER_USER_ID" },
+      { error: "no demo elder recipient: set LINE_DEMO_ELDER_USER_ID" },
       { status: 400 },
     );
   }

@@ -181,12 +181,17 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
               onAudience={changeAudience}
             />
             <Observe subjectId={subject.id} />
-            <ObservationLog subjectId={subject.id} />
             <ElderPreview subjectId={subject.id} />
             <ScheduleCard subjectId={subject.id} />
             <Handoff subjectId={subject.id} itemsText={text} />
           </>
         ) : null}
+
+        {/* Outside the result gate on purpose. The running record is not a
+            consequence of a check — a caregiver who typed into LINE an hour
+            ago needs to see it landed without first re-running a comparison
+            she has no reason to run. */}
+        <ObservationLog subjectId={subject.id} />
       </div>
 
       <aside className="workspace-aside" aria-label="Demo 流程與安全邊界">

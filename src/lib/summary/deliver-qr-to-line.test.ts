@@ -182,7 +182,11 @@ describe("clinician-summary QR delivery", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("refuses before QR work when no elder phone is configured", async () => {
+  it("refuses when no elder phone is bound and broadcast is off", async () => {
+    // Was "refuses BEFORE QR work". The refusal moved below the QR because
+    // MEDBUDDY_DEMO_BROADCAST needs the image to send — a wasted render on the
+    // unconfigured path is worth a demo that works without setup. What must
+    // not change is that nothing is sent.
     vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "");
     vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "");
     vi.stubEnv("LINE_ELDER_USER_ID", "");
@@ -208,8 +212,6 @@ describe("clinician-summary QR delivery", () => {
       code: "missing-elder-recipient",
       reason: "no LINE account is bound to 父親",
     });
-    expect(renderQr).not.toHaveBeenCalled();
-    expect(storeQr).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 

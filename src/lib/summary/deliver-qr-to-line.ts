@@ -5,6 +5,7 @@ import type { Delivery } from "@/lib/delivery/types";
 import type { RoleStore } from "@/lib/roles/types";
 import { LineDelivery } from "@/lib/delivery/line/LineDelivery";
 import { getLineConfig } from "@/lib/delivery/line/config";
+import { broadcastImage, demoBroadcastEnabled } from "@/lib/delivery/line/broadcast";
 import {
   getDemoLinePair,
   recipientForDemoRole,
@@ -46,6 +47,8 @@ export type SummaryQrDeliveryDeps = {
   delivery?: Delivery;
   /** Injectable so offline tests need no store; defaults to the registry's. */
   roleStore?: RoleStore;
+  /** Demo-only broadcast seam; injected in tests, never reached without the flag. */
+  broadcast?: typeof broadcastImage;
 };
 
 async function renderQr(url: string): Promise<Uint8Array> {
@@ -112,13 +115,8 @@ export async function deliverSummaryQrToLine(
   const roleStore = deps.roleStore ?? (await import("@/lib/registry")).getRegistry().roleStore;
   const boundElder = await roleStore.findByRole(subject.id, "elder").catch(() => null);
   const elderTo = boundElder?.channelUserId ?? recipientForDemoRole("elder");
-  if (!elderTo) {
-    return {
-      ok: false,
-      code: "missing-elder-recipient",
-      reason: `no LINE account is bound to ${subject.displayName}`,
-    };
-  }
+  // The bail-out moved below the QR: with MEDBUDDY_DEMO_BROADCAST set there is
+  // still something to send, it just has no address.
   const boundCaregiver = await roleStore
     .findByRole(subject.id, "caregiver")
     .catch(() => null);
@@ -141,6 +139,49 @@ export async function deliverSummaryQrToLine(
   const png = await (deps.renderQr ?? renderQr)(url);
   const stored = await (deps.storeQr ?? storeQr)(summaryQrPath(token), png);
   const delivery = deps.delivery ?? lineDelivery();
+
+  // ── demo escape hatch ────────────────────────────────────────────────────
+  // Nobody bound, but the demo is meant to work without setup. Broadcast
+  // reaches everyone who added the bot, in the elder's shape — see
+  // line/broadcast.ts for why not knowing the audience forces that choice.
+  if (!elderTo) {
+    if (!demoBroadcastEnabled()) {
+      return {
+        ok: false,
+        code: "missing-elder-recipient",
+        reason: `no LINE account is bound to ${subject.displayName}`,
+      };
+    }
+
+    const broadcast = await (deps.broadcast ?? broadcastImage)({
+      channelAccessToken: getLineConfig().channelAccessToken,
+      text:
+        `${subject.displayName},這是這次回診要給醫師看的單子。\n` +
+        `到診間的時候,把下面這張圖拿給醫師掃一下就好,不用做別的。\n` +
+        `今天之內有效。`,
+      imageUrl: stored.url,
+    });
+
+    // Loud: this went to an audience rather than a person, which is the one
+    // thing the rest of the product refuses to do.
+    console.error("[medbuddy] summary QR BROADCAST — no bound elder", {
+      subjectId: subject.id,
+      ok: broadcast.ok,
+    });
+
+    if (!broadcast.ok) {
+      return {
+        ok: false,
+        code: "elder-delivery-failed",
+        reason: broadcast.reason,
+      };
+    }
+    return {
+      ok: true,
+      deliveredAt: new Date(now).toISOString(),
+      recipients: { elder: true, caregiver: false },
+    };
+  }
 
   const elderResult = await delivery.send(
     {

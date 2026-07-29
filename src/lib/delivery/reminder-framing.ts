@@ -63,9 +63,29 @@ const CLOSINGS = [
  * four different ones at random is a machine trying not to sound like one.
  */
 function pick(list: string[], key: string): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  // FNV-1a rather than the 31-multiplier: four slot ids differing in one
+  // character collided on the same opening three times out of four, which is
+  // a machine repeating itself while appearing to vary.
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
   return list[Math.abs(hash) % list.length];
+}
+
+/**
+ * Strip the narration's own greeting when a reminder supplies one.
+ *
+ * The rules open with 「父親好,」 because the same narration is used when he
+ * asks a question and there is no greeting before it. In a reminder there is
+ * one, and 「阿公,吃藥時間到了。父親好,…」 is two people talking.
+ *
+ * Only the salutation goes. The sentence it was attached to is kept, because
+ * it is the rules' sentence.
+ */
+function dropLeadingSalutation(narration: string): string {
+  return narration.replace(/^[^\n,,]{1,6}好[,,]\s*/u, "");
 }
 
 export type Framing = "reminder" | "plain";
@@ -79,7 +99,7 @@ export type Framing = "reminder" | "plain";
 export function frameReminder(narration: string, slotKey: string): string {
   const opening = pick(OPENINGS, slotKey);
   const closing = pick(CLOSINGS, `${slotKey}-close`);
-  return `${opening}\n\n${narration}\n\n${closing}`;
+  return `${opening}\n\n${dropLeadingSalutation(narration)}\n\n${closing}`;
 }
 
 /** The rules this file must not break, as a check rather than a comment. */

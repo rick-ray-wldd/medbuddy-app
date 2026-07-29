@@ -963,3 +963,92 @@ a {
   color: var(--muted);
   margin-bottom: 0.75rem;
 }
+
+/* Elder preview — the phone, on the dashboard.
+   Bordered like a device rather than styled like a quote, because the point
+   is that this is what arrives on his screen, not what we say about it. */
+.phone-frame {
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.875rem;
+  background: color-mix(in srgb, var(--border) 12%, transparent);
+}
+
+.phone-bubble {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem 0.75rem 0.75rem 0.25rem;
+  padding: 0.875rem 1rem;
+  /* His type size, not ours: presbyopia is the reason this product exists. */
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+
+.phone-voice {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.segment-key {
+  margin-top: 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.segment-key-title {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.segment-key ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.segment-key li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.segment-tag {
+  flex: none;
+  min-width: 5.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+/* verified is the one that carries somebody else's authority, so it is the
+   one that looks different. */
+.segment-verified { background: #e3f2e8; color: #17512f; }
+.segment-explained { background: #e7eefb; color: #1c3a68; }
+.segment-action { background: #fdf0e1; color: #6b4212; }
+.segment-coverage { background: #f0eef7; color: #3f3560; }
+.segment-unresolved { background: #fbe9e9; color: #6d2020; }
+
+.segment-note { color: var(--muted); }
+
+.qr-panel {
+  margin-top: 0.875rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+}
+
+.qr-panel p {
+  flex: 1 1 16rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin: 0;
+}

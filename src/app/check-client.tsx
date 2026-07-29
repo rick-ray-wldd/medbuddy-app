@@ -9,6 +9,7 @@ import type { Narration, NarrationAudience } from "@/lib/narration/types";
 import type { ItemSource } from "@/lib/grounding/types";
 import { DictateButton, SpeakButton } from "./speech";
 import { ScheduleCard } from "./schedule-card";
+import { ElderPreview } from "./elder-preview";
 
 const SOURCE_LABELS: Record<ItemSource, string> = {
   prescription: "處方",
@@ -179,6 +180,7 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
               onAudience={changeAudience}
             />
             <Observe subjectId={subject.id} />
+            <ElderPreview subjectId={subject.id} />
             <ScheduleCard subjectId={subject.id} />
             <Handoff subjectId={subject.id} itemsText={text} />
           </>

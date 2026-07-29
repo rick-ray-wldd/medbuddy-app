@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { getRegistry } from "@/lib/registry";
 import { findSubject } from "@/lib/subjects";
 import { defaultVoice, findDemoVoice } from "@/lib/voice/profiles";
 import {
@@ -55,7 +56,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const to = recipientForDemoRole("elder");
+  // Third place that asked the environment who the elder is. The binding is
+  // what he answered on the card; the variable is a deployment convenience
+  // that predates the card existing.
+  // Defensive on the registry itself: a deployment without Blob has no role
+  // store, and the demo-pair variables are the fallback that path was built
+  // for. Never the other way round — a stale variable must not win over an
+  // answer he actually gave.
+  const bound = await (async () => {
+    try {
+      return await getRegistry().roleStore?.findByRole(subject.id, "elder");
+    } catch {
+      return null;
+    }
+  })();
+  const to = bound?.channelUserId ?? recipientForDemoRole("elder");
   if (!to) {
     return NextResponse.json(
       { error: "no demo elder recipient: set LINE_DEMO_ELDER_USER_ID" },

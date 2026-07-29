@@ -63,6 +63,7 @@ change to a medication-safety rule is diffable and reviewable.
 | [`docs/DATA-MODEL.md`](./docs/DATA-MODEL.md) | Entities and the constraints they enforce |
 | [`docs/LINE-ADAPTER-SPEC.md`](./docs/LINE-ADAPTER-SPEC.md) | Spec a collaborator builds the LINE adapter from |
 | [`docs/LINE-UX-SPEC.md`](./docs/LINE-UX-SPEC.md) | What the two people see and can touch in LINE, and what the bot must never do |
+| [`docs/ELDER-MENU-ARCHITECTURE.md`](./docs/ELDER-MENU-ARCHITECTURE.md) | The older adult's four buttons: what each is architecturally, and what is still missing from each |
 | [`docs/VOICE-DELIVERY-SPEC.md`](./docs/VOICE-DELIVERY-SPEC.md) | Whose voice speaks, under what consent, and why a persona never changes the words |
 | [`src/lib/README.md`](./src/lib/README.md) | Module seams |
 | [`NOTES.md`](./NOTES.md) | Build log — what broke, what the AI wrote and what I rejected |

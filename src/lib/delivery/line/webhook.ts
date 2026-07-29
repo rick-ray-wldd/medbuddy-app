@@ -25,8 +25,11 @@ type LineWebhookBody = {
     webhookEventId?: string;
     /** postback only. Free-form string WE authored into a menu or card — but
      *  it arrives from the client, so upstream re-checks it rather than
-     *  trusting it (see lib/roles/bind.ts). */
-    postback?: { data?: string };
+     *  trusting it (see lib/roles/bind.ts). `params.time` is present when the
+     *  action was a datetimepicker with mode "time" — also client input,
+     *  re-validated upstream.
+     *  https://developers.line.biz/en/reference/messaging-api/#postback-event */
+    postback?: { data?: string; params?: { time?: string } };
     message?: {
       id?: string;
       type?: string; // "text" | "audio" | "sticker" | …
@@ -117,7 +120,11 @@ export async function handleLineWebhookRequest(
         body:
           event.type === "follow"
             ? { kind: "follow" }
-            : { kind: "postback", data: event.postback?.data ?? "" },
+            : {
+                kind: "postback",
+                data: event.postback?.data ?? "",
+                pickedTime: event.postback?.params?.time,
+              },
       });
       continue;
     }

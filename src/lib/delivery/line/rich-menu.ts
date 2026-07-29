@@ -112,25 +112,36 @@ export const ELDER_CELLS: Cell[] = [
 
 export const CAREGIVER_CELLS: Cell[] = [
   { label: "記一件事", sub: "打一段話就好", icon: "pencil", data: "action=note" },
-  { label: "產生回診單", sub: "兩邊都收到 QR", icon: "document", data: "action=summary" },
   { label: "紀錄用藥", sub: "拍藥袋照片", icon: "camera", data: "action=log_meds" },
+  { label: "產生回診單", sub: "兩邊都收到 QR", icon: "document", data: "action=summary" },
+  // In-LINE schedule editing + the caregiver-initiated send (§6.2) — the two
+  // outbound controls live on the phone as well as the web dashboard.
+  { label: "服藥提醒", sub: "固定時間自動傳語音", icon: "clock", data: "action=reminders" },
+  { label: "傳說明", sub: "立刻把用藥說明傳給長輩", icon: "speaker", data: "action=send_explanation" },
   { label: "切換身分", sub: "重新選擇", icon: "swap", data: "action=rebind" },
 ];
 
 function grid(cells: Cell[], cols: number, rows: number): RichMenuArea[] {
-  const width = Math.floor(FULL.width / cols);
-  const height = Math.floor(FULL.height / rows);
-  return cells.map((cell, i) => ({
-    bounds: {
-      x: (i % cols) * width,
-      y: Math.floor(i / cols) * height,
-      width,
-      height,
-    },
-    action: cell.uri !== undefined
-      ? { type: "uri" as const, label: cell.label, uri: cell.uri }
-      : { type: "postback" as const, label: cell.label, data: cell.data! },
-  }));
+  // Edges land on floor(k·size/n) so the tiling is exact for any n — a plain
+  // floor(size/n) cell width loses pixels when n does not divide the canvas
+  // (2500/3), and the tiling test rightly refuses gaps.
+  const xEdge = (k: number) => Math.floor((k * FULL.width) / cols);
+  const yEdge = (k: number) => Math.floor((k * FULL.height) / rows);
+  return cells.map((cell, i) => {
+    const c = i % cols;
+    const r = Math.floor(i / cols);
+    return {
+      bounds: {
+        x: xEdge(c),
+        y: yEdge(r),
+        width: xEdge(c + 1) - xEdge(c),
+        height: yEdge(r + 1) - yEdge(r),
+      },
+      action: cell.uri !== undefined
+        ? { type: "uri" as const, label: cell.label, uri: cell.uri }
+        : { type: "postback" as const, label: cell.label, data: cell.data! },
+    };
+  });
 }
 
 export function elderRichMenu(): RichMenuDefinition {
@@ -150,7 +161,7 @@ export function caregiverRichMenu(): RichMenuDefinition {
     selected: true,
     name: "medbuddy-caregiver",
     chatBarText: "照顧工具",
-    areas: grid(CAREGIVER_CELLS, 2, 2),
+    areas: grid(CAREGIVER_CELLS, 3, 2),
   };
 }
 

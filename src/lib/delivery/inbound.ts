@@ -43,7 +43,7 @@ export type InboundMessage = {
     | { kind: "text"; text: string }
     | { kind: "audio"; audio: Uint8Array; format: string; durationMs?: number }
     | { kind: "follow" }
-    | { kind: "postback"; data: string };
+    | { kind: "postback"; data: string; pickedTime?: string };
 };
 
 /**
@@ -91,6 +91,8 @@ export type InboundDeps = {
   delivery?: Delivery;
   /** injectable; defaults to the registry's store */
   roleStore?: RoleStore;
+  /** injectable; defaults to the Blob-backed schedule store */
+  scheduleStore?: import("../schedule/store").ScheduleStore;
   /** injectable; defaults to the real LINE setup client */
   setup?: {
     pushFlex(userId: string, message: unknown): Promise<{ ok: boolean }>;
@@ -135,6 +137,11 @@ const ROLE_ACTIONS: Record<Role, ReadonlySet<string>> = {
     "subjects",
     "pair_info",
     "log_meds",
+    // in-LINE reminder schedule (§6.2's configured schedule) + immediate send
+    "reminders",
+    "reminder_add",
+    "reminder_remove",
+    "send_explanation",
   ]),
 };
 
@@ -208,6 +215,7 @@ export async function handleInbound(
           msg.receivedAt,
           msg.body.data,
           deps,
+          msg.body.pickedTime,
         );
 
       case "text":
@@ -228,6 +236,23 @@ async function sendRoleCard(channelUserId: string, deps: InboundDeps): Promise<v
   const { roleSelectionCard } = await import("./line/role-card");
   const result = await setup.pushFlex(channelUserId, roleSelectionCard());
   console.log("[medbuddy] role card sent", { channelUserId, ok: result.ok });
+}
+
+async function sendRemindersCard(
+  channelUserId: string,
+  subjectId: string,
+  deps: InboundDeps,
+): Promise<void> {
+  const setup = await getSetup(deps);
+  const { remindersCard } = await import("./line/reminders-card");
+  const { BlobScheduleStore } = await import("../schedule/store");
+  const store = deps.scheduleStore ?? new BlobScheduleStore();
+  const schedule = await store.get(subjectId);
+  const result = await setup.pushFlex(
+    channelUserId,
+    remindersCard(schedule?.slots ?? []),
+  );
+  console.log("[medbuddy] reminders card sent", { channelUserId, ok: result.ok });
 }
 
 async function handleFollow(channelUserId: string, deps: InboundDeps): Promise<void> {
@@ -270,6 +295,7 @@ async function handlePostback(
   receivedAt: string,
   data: string,
   deps: InboundDeps,
+  pickedTime?: string,
 ): Promise<void> {
   const roleStore = await getRoleStore(deps);
 
@@ -370,6 +396,53 @@ async function handlePostback(
       return await reachFamily(channelUserId, subjectId, deps);
     case "summary":
       return await sendSummaryQr(subjectId, deps);
+    // ── in-LINE reminder schedule (§6.2's caregiver-configured schedule).
+    // The card and its confirmations are interface furniture (role-card
+    // category); medication content still only ever leaves via the pipeline.
+    case "reminders":
+      return await sendRemindersCard(channelUserId, subjectId, deps);
+    case "reminder_add": {
+      const { addReminderSlot } = await import("./line/reminder-settings");
+      const result = await addReminderSlot(subjectId, pickedTime, deps.scheduleStore);
+      if (result.ok) {
+        return await sendRemindersCard(channelUserId, subjectId, deps);
+      }
+      reply = { text: result.message, fromPipeline: false };
+      break;
+    }
+    case "reminder_remove": {
+      const slotId = new URLSearchParams(data).get("slot") ?? "";
+      const { removeReminderSlot } = await import("./line/reminder-settings");
+      await removeReminderSlot(subjectId, slotId, deps.scheduleStore);
+      return await sendRemindersCard(channelUserId, subjectId, deps);
+    }
+    case "send_explanation": {
+      // The caregiver-initiated outbound, from the phone instead of the web
+      // button — identical core (deliver-explanation.ts), identical bounds.
+      const { findSubject } = await import("../subjects");
+      const { recipientForDemoRole } = await import("./line/demo-pair");
+      const { defaultVoice } = await import("../voice/profiles");
+      const { deliverExplanationToElder } = await import("./deliver-explanation");
+      const subj = findSubject(subjectId);
+      const elderTo = recipientForDemoRole("elder");
+      if (!subj || !elderTo) {
+        reply = { text: "還沒有設定長輩的 LINE,說明沒有送出。", fromPipeline: false };
+        break;
+      }
+      const outcome = await deliverExplanationToElder({
+        subjectId,
+        items: subj.cupboard,
+        to: elderTo,
+        voiceProfile: defaultVoice() ?? null,
+      });
+      reply = {
+        text: outcome.delivery.ok
+          ? "已把用藥說明傳給長輩了。"
+          : "說明沒有送出,請稍後再試一次。",
+        fromPipeline: false,
+      };
+      break;
+    }
     default:
       // A press we do not recognise. Silence (§3) — it can only be a stale
       // menu or a crafted payload.

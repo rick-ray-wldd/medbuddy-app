@@ -85,8 +85,22 @@ export class BlobLogStore implements LogStore {
   }
 
   async appendObservation(observation: Observation): Promise<void> {
-    const log = await this.read(observation.subjectId);
-    log.observations.push(observation);
+    await this.appendObservations([observation]);
+  }
+
+  /**
+   * One read, all the pushes, one write.
+   *
+   * The loop that used to live in the callers issued a read-modify-write per
+   * observation, and Blob does not promise a read sees the write before it.
+   * Four observations from one paragraph became one; the count in the log said
+   * four, so it looked like it had worked.
+   */
+  async appendObservations(observations: Observation[]): Promise<void> {
+    if (observations.length === 0) return;
+    const subjectId = observations[0].subjectId;
+    const log = await this.read(subjectId);
+    log.observations.push(...observations);
     await this.write(log);
   }
 

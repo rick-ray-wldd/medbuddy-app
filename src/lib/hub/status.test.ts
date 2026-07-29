@@ -21,6 +21,7 @@ function logs(value: SubjectLog): LogStore {
     read: async () => value,
     appendSnapshot: async () => undefined,
     appendObservation: async () => undefined,
+    appendObservations: async () => undefined,
   };
 }
 
@@ -89,6 +90,7 @@ describe("loadHubStatus", () => {
       },
       appendSnapshot: async () => undefined,
       appendObservation: async () => undefined,
+    appendObservations: async () => undefined,
     };
 
     const status = await loadHubStatus(pair, failingRoles, failingLogs);

@@ -28,6 +28,12 @@ export class InMemoryLogStore implements LogStore {
     append(this.observations, observation.subjectId, observation);
   }
 
+  async appendObservations(observations: Observation[]): Promise<void> {
+    for (const observation of observations) {
+      await this.appendObservation(observation);
+    }
+  }
+
   async read(subjectId: string): Promise<SubjectLog> {
     return {
       subjectId,

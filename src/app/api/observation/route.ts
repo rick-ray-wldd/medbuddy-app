@@ -49,10 +49,10 @@ export async function POST(request: Request) {
     ? { observations: [{ kind: explicit, note }], usedFallback: false, rejected: [] }
     : await parseObservations(note, observationExtractor());
 
-  let index = 0;
-  for (const observation of parsed.observations) {
-    await logStore.appendObservation({
-      id: `${subject.id}:${observedAt}:${index++}`,
+  // One write for the whole paragraph — see LogStore.appendObservations.
+  await logStore.appendObservations(
+    parsed.observations.map((observation, index) => ({
+      id: `${subject.id}:${observedAt}:${index}`,
       subjectId: subject.id,
       observedAt,
       kind: observation.kind,
@@ -61,8 +61,8 @@ export async function POST(request: Request) {
       // is something a doctor can act on; 「最近比較累」 is not.
       note: observation.note,
       reportedByCarerId: "carer-demo",
-    });
-  }
+    })),
+  );
 
   return NextResponse.json({
     ok: true,

@@ -78,5 +78,18 @@ export type SubjectLog = {
 export interface LogStore {
   appendSnapshot(snapshot: RegimenSnapshot): Promise<void>;
   appendObservation(observation: Observation): Promise<void>;
+  /**
+   * Append several observations as ONE write.
+   *
+   * Not a convenience wrapper. One paragraph from a caregiver segments into
+   * several observations, and appending them one at a time is a sequence of
+   * read-modify-writes over the whole document — which silently loses all but
+   * the last when the store has no read-your-writes guarantee. It did:
+   * 「有吃止痛藥」 arrived as four observations, the log recorded
+   * `count: 4`, and one survived.
+   *
+   * Every caller that has more than one observation in hand must use this.
+   */
+  appendObservations(observations: Observation[]): Promise<void>;
   read(subjectId: string): Promise<SubjectLog>;
 }

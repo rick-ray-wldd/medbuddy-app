@@ -501,17 +501,18 @@ async function handleText(
       ]);
     const parsed = await parseObservations(text.trim(), observationExtractor());
     const { logStore } = getRegistry();
-    let i = 0;
-    for (const o of parsed.observations) {
-      await logStore.appendObservation({
-        id: `${subjectId}:${msg.receivedAt}:${i++}`,
+    // One write for the whole paragraph. Appending per observation was a
+    // read-modify-write each time, and all but the last were lost.
+    await logStore.appendObservations(
+      parsed.observations.map((o, i) => ({
+        id: `${subjectId}:${msg.receivedAt}:${i}`,
         subjectId,
         observedAt: msg.receivedAt,
         kind: o.kind,
         note: o.note,
         reportedByCarerId: `line:${msg.channelUserId}`,
-      });
-    }
+      })),
+    );
     console.log("[medbuddy] observations recorded from LINE", {
       subjectId,
       count: parsed.observations.length,

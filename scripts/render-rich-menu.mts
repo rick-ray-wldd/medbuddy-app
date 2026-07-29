@@ -93,6 +93,14 @@ function icon(name: IconName, cx: number, cy: number, r: number): string {
     window: `<rect x="${cx - r * 0.85}" y="${cy - r * 0.7}" width="${r * 1.7}" height="${r * 1.4}" rx="${r * 0.14}" fill="none" stroke="${s}" stroke-width="${r * 0.2}"/>
      <line x1="${cx - r * 0.85}" y1="${cy - r * 0.28}" x2="${cx + r * 0.85}" y2="${cy - r * 0.28}" stroke="${s}" stroke-width="${r * 0.2}"/>`,
 
+    clock: `<circle cx="${cx}" cy="${cy}" r="${r * 0.85}" fill="none" stroke="${s}" stroke-width="${r * 0.2}"/>
+     <line x1="${cx}" y1="${cy - r * 0.45}" x2="${cx}" y2="${cy}" stroke="${s}" stroke-width="${r * 0.2}" stroke-linecap="round"/>
+     <line x1="${cx}" y1="${cy}" x2="${cx + r * 0.35}" y2="${cy + r * 0.25}" stroke="${s}" stroke-width="${r * 0.2}" stroke-linecap="round"/>`,
+
+    camera: `<rect x="${cx - r * 0.9}" y="${cy - r * 0.55}" width="${r * 1.8}" height="${r * 1.2}" rx="${r * 0.16}" fill="none" stroke="${s}" stroke-width="${r * 0.2}"/>
+     <path d="M ${cx - r * 0.35} ${cy - r * 0.55} l ${r * 0.18} -${r * 0.28} h ${r * 0.34} l ${r * 0.18} ${r * 0.28}" fill="none" stroke="${s}" stroke-width="${r * 0.2}" stroke-linejoin="round"/>
+     <circle cx="${cx}" cy="${cy + r * 0.06}" r="${r * 0.34}" fill="none" stroke="${s}" stroke-width="${r * 0.2}"/>`,
+
     swap: `<path d="M ${cx - r * 0.7} ${cy - r * 0.25} h ${r * 1.4} l -${r * 0.4} -${r * 0.4}" fill="none" stroke="${s}" stroke-width="${r * 0.2}" stroke-linecap="round" stroke-linejoin="round"/>
      <path d="M ${cx + r * 0.7} ${cy + r * 0.25} h -${r * 1.4} l ${r * 0.4} ${r * 0.4}" fill="none" stroke="${s}" stroke-width="${r * 0.2}" stroke-linecap="round" stroke-linejoin="round"/>`,
   };
@@ -160,4 +168,4 @@ async function render(cells: Cell[], cols: number, rows: number, out: string) {
 
 const root = process.cwd();
 await render(ELDER_CELLS, 2, 2, path.join(root, "public", "rich-menu-elder.png"));
-await render(CAREGIVER_CELLS, 3, 2, path.join(root, "public", "rich-menu-caregiver.png"));
+await render(CAREGIVER_CELLS, 2, 2, path.join(root, "public", "rich-menu-caregiver.png"));

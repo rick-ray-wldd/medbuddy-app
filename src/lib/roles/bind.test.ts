@@ -79,3 +79,43 @@ describe("postback data is client input", () => {
     }
   });
 });
+
+describe("MEDBUDDY_ALLOW_ROLE_SWITCH", () => {
+  const ON = { MEDBUDDY_ALLOW_ROLE_SWITCH: "true" };
+
+  it("lets an elder become a caregiver when the flag is on", async () => {
+    // What this unblocks: someone who tapped the wrong card on the right
+    // phone, and had no way back from inside LINE.
+    await bindRole(store, "Uphone", "elder", "subj-father", AT, ON);
+    const out = await bindRole(store, "Uphone", "caregiver", "subj-father", AT, ON);
+
+    expect(out.ok).toBe(true);
+    expect(await store.get("Uphone")).toMatchObject({ role: "caregiver" });
+  });
+
+  it("switches back and forth without getting stuck", async () => {
+    for (const role of ["elder", "caregiver", "elder", "caregiver"] as const) {
+      const out = await bindRole(store, "Uphone", role, "subj-father", AT, ON);
+      expect(out.ok, role).toBe(true);
+      expect(await store.get("Uphone")).toMatchObject({ role });
+    }
+  });
+
+  it("still refuses when the flag is absent", async () => {
+    // Default-off is the point: an unset variable gives the safe behaviour,
+    // and a real deployment leaves it unset.
+    await bindRole(store, "Uphone", "elder", "subj-father", AT, {});
+    const out = await bindRole(store, "Uphone", "caregiver", "subj-father", AT, {});
+    expect(out.ok).toBe(false);
+  });
+
+  it("refuses for any value that is not exactly \"true\"", async () => {
+    for (const value of ["1", "yes", "TRUE", "on", ""]) {
+      const fresh = new InMemoryRoleStore();
+      const env = { MEDBUDDY_ALLOW_ROLE_SWITCH: value };
+      await bindRole(fresh, "Uphone", "elder", "subj-father", AT, env);
+      const out = await bindRole(fresh, "Uphone", "caregiver", "subj-father", AT, env);
+      expect(out.ok, value).toBe(false);
+    }
+  });
+});

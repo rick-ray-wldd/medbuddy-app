@@ -38,16 +38,46 @@ export type BindOutcome =
   | { ok: true; binding: RoleBinding; changed: boolean }
   | { ok: false; reason: "elder_binding_is_terminal"; binding: RoleBinding };
 
+/**
+ * Whether an elder may leave the elder role.
+ *
+ * ## Why this became a flag rather than staying absolute
+ *
+ * The terminal rule was written when *anyone* could claim *any* role: the only
+ * thing standing between a stranger's crafted postback and the caregiver
+ * surface was this function. Under that threat model, refusing every
+ * elder→caregiver transition was the whole defence.
+ *
+ * `canClaimDemoRole` changed the threat model. The deployment now names which
+ * two LINE accounts may hold which role, and a third phone is refused before
+ * `bindRole` is ever reached. The gate does the guarding, and the terminal
+ * rule was left blocking only the two people who are supposed to be here —
+ * including, during setup, someone who tapped the wrong card on the right
+ * phone and had no way back.
+ *
+ * **The original argument has not stopped being true.** The caregiver surface
+ * holds what the family wrote about him — 「他最近比較常喝酒」 — in their words,
+ * about him, without his having been asked. A real deployment should leave
+ * this off, and the default here is off for that reason: an unset variable
+ * gives the safe behaviour, and enabling it is a deliberate act.
+ */
+export function roleSwitchingIsEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return env.MEDBUDDY_ALLOW_ROLE_SWITCH?.trim() === "true";
+}
+
 export async function bindRole(
   store: RoleStore,
   channelUserId: string,
   role: Role,
   subjectId: string,
   boundAt: string,
+  env: Record<string, string | undefined> = process.env,
 ): Promise<BindOutcome> {
   const existing = await store.get(channelUserId);
 
-  if (existing?.role === "elder" && role !== "elder") {
+  if (existing?.role === "elder" && role !== "elder" && !roleSwitchingIsEnabled(env)) {
     // Refused, and loudly — a legitimate user cannot produce this, so it is
     // either a crafted postback or a bug in our own menu wiring.
     console.error("[medbuddy] refused rebind away from elder", {

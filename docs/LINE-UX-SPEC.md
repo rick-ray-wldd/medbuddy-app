@@ -137,8 +137,8 @@ expressed here — and the clinician, who is not a LINE participant at all, is
 simply absent.
 
 The menus belong to two *people*, not two sections of one person's interface.
-The caregiver's 切換身分 action exists only as setup recovery; an elder binding
-is terminal and cannot enter the caregiver surface.
+Neither menu offers role switching. Operator unbind is the recovery path; an
+elder binding is terminal and cannot enter the caregiver surface.
 
 ### Elder — a 2×2 menu, four large targets
 
@@ -184,7 +184,7 @@ top. Depth is the thing to spend on a caregiver and refuse an elder.
 ┌────────────┬────────────┬────────────┐
 │  記一件事   │  產生回診單  │ 他問了什麼   │
 ├────────────┼────────────┼────────────┤
-│  照顧對象   │   開啟網頁   │  切換身分    │
+│  照顧對象   │   開啟網頁   │  配對說明    │
 └────────────┴────────────┴────────────┘
 ```
 

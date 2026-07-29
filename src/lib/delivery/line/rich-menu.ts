@@ -12,16 +12,19 @@
  * mistake rather than the user's. Spec §3 says the bot must not reply to what
  * it does not understand — silence beats a guess — but silence in answer to a
  * button *we put there* reads as broken, and to an older adult it reads as
- * "I did it wrong". So the menus below carry only actions that exist: the
- * caregiver's 拍藥袋 (bag OCR) is absent, because it is specified
- * (docs/MEDICATION-BAG-OCR-MIGRATION.md) and not built.
+ * "I did it wrong".
  *
- * ## Why the elder gets four cells and the caregiver six
+ * Every cell below therefore answers. Two of them answer by saying the feature
+ * is not ready yet (紀錄用藥, 用藥提醒), which is a worse product than having
+ * them work and a much better one than a button that swallows a press: he
+ * learns the state of the system rather than doubting his own aim.
+ *
+ * ## Four cells each
  *
  * Six targets on a 2500×1686 menu are 833px wide; four are 1250px. At the
  * distance a phone is held by someone with presbyopia, that difference is
- * whether a thumb lands where it aimed. Depth is a thing to spend on a
- * caregiver and refuse an elder.
+ * whether a thumb lands where it aimed — so the caregiver's menu gave up its
+ * third column too.
  *
  * Field names verified 2026-07-28 against
  * https://developers.line.biz/en/reference/messaging-api/#rich-menu-object
@@ -64,7 +67,9 @@ export type IconName =
   | "document"
   | "question"
   | "window"
-  | "swap";
+  | "swap"
+  | "clock"
+  | "camera";
 
 export type Cell = {
   label: string;
@@ -74,19 +79,41 @@ export type Cell = {
   uri?: string;
 };
 
+/**
+ * Both menus are 2×2 now, four cells each.
+ *
+ * The caregiver's was 2×3 and lost 他問了什麼, 照顧對象 and 開啟網頁 — not
+ * because they were bad, but because a subject switcher over a roster of one
+ * is a control with nothing to control, and a cell kept on "might be useful"
+ * takes size from the ones that are. Four 1250×843 targets beat six 833×843
+ * ones on a phone held at arm's length.
+ *
+ * ## 切換身分 is on the elder's menu, and that is a reversal
+ *
+ * §1b said an elder binding is terminal and he must never reach the caregiver
+ * surface. That rule was written when any phone could claim any role, and it
+ * was the only thing between a crafted postback and what his family wrote
+ * about him. `canClaimDemoRole` now refuses every phone but the two the
+ * deployment names, so the gate does that work — and the terminal rule was
+ * left stranding whoever tapped the wrong card on the right phone, with no
+ * way back from inside LINE.
+ *
+ * The cell is a `postback`, never a `uri`: `assertNoLinksForElder` still
+ * holds and he is still never taught to tap a link. What changed is only
+ * whether a second answer is possible, and that is gated on
+ * MEDBUDDY_ALLOW_ROLE_SWITCH, which a real deployment leaves off.
+ */
 export const ELDER_CELLS: Cell[] = [
-  { label: "我的藥", sub: "今天在吃什麼", icon: "pill", data: "action=my_meds" },
-  { label: "這顆是什麼", sub: "用說的或打字", icon: "magnifier", data: "action=how_to_ask" },
-  { label: "再唸一次", sub: "最近核對說明", icon: "speaker", data: "action=repeat" },
-  { label: "找家人", sub: "通知照顧者", icon: "people", data: "action=reach_family" },
+  { label: "我的藥", sub: "照顧者記錄的用藥", icon: "pill", data: "action=my_meds" },
+  { label: "產生回診單", sub: "帶去給醫師掃", icon: "document", data: "action=summary" },
+  { label: "用藥提醒", sub: "什麼時候吃、飯前飯後", icon: "clock", data: "action=schedule" },
+  { label: "切換身分", sub: "重新選擇", icon: "swap", data: "action=rebind" },
 ];
 
 export const CAREGIVER_CELLS: Cell[] = [
   { label: "記一件事", sub: "打一段話就好", icon: "pencil", data: "action=note" },
-  { label: "產生回診單", sub: "QR 傳給長輩", icon: "document", data: "action=summary" },
-  { label: "他問了什麼", sub: "最近的提問", icon: "question", data: "action=recent_questions" },
-  { label: "照顧對象", sub: "父親 · 固定配對", icon: "people", data: "action=subjects" },
-  { label: "開啟網頁", sub: "完整介面", icon: "window", uri: "" }, // uri filled below
+  { label: "產生回診單", sub: "兩邊都收到 QR", icon: "document", data: "action=summary" },
+  { label: "紀錄用藥", sub: "拍藥袋照片", icon: "camera", data: "action=log_meds" },
   { label: "切換身分", sub: "重新選擇", icon: "swap", data: "action=rebind" },
 ];
 
@@ -126,7 +153,7 @@ export function caregiverRichMenu(baseUrl: string): RichMenuDefinition {
     selected: true,
     name: "medbuddy-caregiver",
     chatBarText: "照顧工具",
-    areas: grid(cells, 3, 2),
+    areas: grid(cells, 2, 2),
   };
 }
 

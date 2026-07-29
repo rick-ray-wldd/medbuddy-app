@@ -18,7 +18,7 @@ This is the authoritative scope for the review prototype:
 
 ```text
 DemoCarePair
-  subjectId           = LINE_DEMO_SUBJECT_ID (default: subj-father)
+  subjectId           = subj-father (code constant; not environment-configurable)
   elderLineUserId     = LINE_DEMO_ELDER_USER_ID
   caregiverLineUserId = LINE_DEMO_CAREGIVER_USER_ID
 

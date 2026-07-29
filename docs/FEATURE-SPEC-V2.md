@@ -3,6 +3,12 @@
 > 給守豐:這份是**要做什麼**與**不可以做什麼**。實作方式你決定,但第 6 節的規則是硬的。
 > 取代 `docs/LINE-UX-SPEC.md` 的選單部分;該文件的 §2、§3、§6 仍然有效。
 > 版本:2026-07-29 · 對應 commit `4db93ad` 之後
+>
+> **目前 Demo 覆寫（2026-07-29）：** 最新方向是兩支手機各自固定一個角色，
+> 不在聊天中切換身分；目前可執行選單與驗收契約以
+> `docs/LINE-UX-SPEC.md` 的「Demo contract」為準。本文件的 4 格選單、
+> 第 2 節角色切換、3.4、4.4 與 `MEDBUDDY_ALLOW_ROLE_SWITCH` 都是後續候選
+> 功能，**不屬於這次提交，也不得在面試中宣稱已完成**。
 
 ---
 
@@ -310,7 +316,7 @@ type DosingSchedule = {
 # 固定一對(demo 契約)
 LINE_DEMO_ELDER_USER_ID=U...
 LINE_DEMO_CAREGIVER_USER_ID=U...
-LINE_DEMO_SUBJECT_ID=subj-father
+# subject 固定為程式中的 subj-father，不接受環境變數覆寫
 
 # 角色切換(第 2 節)—— 真實部署應關閉
 MEDBUDDY_ALLOW_ROLE_SWITCH=true

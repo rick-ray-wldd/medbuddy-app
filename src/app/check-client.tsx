@@ -230,7 +230,6 @@ function SendToLine({ subjectId, itemsText }: { subjectId: string; itemsText: st
         body: JSON.stringify({
           subjectId,
           items: parseLines(itemsText),
-          audience: "elder",
         }),
       });
       const data = (await response.json()) as {

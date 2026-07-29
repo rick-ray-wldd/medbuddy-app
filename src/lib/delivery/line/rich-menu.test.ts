@@ -50,32 +50,47 @@ describe("the elder's menu", () => {
 describe("the caregiver's menu", () => {
   const menu = caregiverRichMenu("https://medbuddy-app.vercel.app");
 
-  it("gives six targets and tiles the menu", () => {
-    expect(menu.areas).toHaveLength(6);
+  it("gives four targets and tiles the menu", () => {
+    // Was 2×3. 他問了什麼, 照顧對象 and 開啟網頁 came off: a subject switcher
+    // over a roster of one is a control with nothing to control, and cells
+    // kept on "might be useful" take size from the ones that are.
+    expect(menu.areas).toHaveLength(4);
     const covered = menu.areas.reduce((sum, a) => sum + a.bounds.width * a.bounds.height, 0);
-    // 2500 / 3 floors to 833, so three columns cover 2499 of 2500 px.
-    expect(covered).toBe(833 * 3 * 843 * 2);
+    expect(covered).toBe(2500 * 1686);
   });
 
-  it("is allowed exactly one link, and it points at our own base URL", () => {
-    const uris = menu.areas.filter((a) => a.action.type === "uri");
-    expect(uris).toHaveLength(1);
-    expect(uris[0].action.type === "uri" && uris[0].action.uri).toBe(
-      "https://medbuddy-app.vercel.app/",
+  it("carries no link now that the webview cell is gone", () => {
+    expect(menu.areas.every((a) => a.action.type === "postback")).toBe(true);
+  });
+
+  it("offers exactly the four features the demo implements", () => {
+    expect(CAREGIVER_CELLS.map((c) => c.label)).toEqual([
+      "記一件事",
+      "產生回診單",
+      "紀錄用藥",
+      "切換身分",
+    ]);
+  });
+});
+
+describe("both menus can leave the role they are on", () => {
+  it("each has 切換身分, so neither phone can be stranded", () => {
+    // The failure this prevents: tapping the wrong card on the right phone
+    // and having no way back from inside LINE. The terminal rule used to make
+    // that unrecoverable without an operator.
+    for (const cells of [ELDER_CELLS, CAREGIVER_CELLS]) {
+      expect(cells.map((c) => c.data)).toContain("action=rebind");
+    }
+  });
+
+  it("does so through a postback, never a uri", () => {
+    // assertNoLinksForElder still holds: he is not taught to tap links, and
+    // the escape hatch does not become one.
+    const rebind = elderRichMenu().areas.find(
+      (a) => a.action.type === "postback" && a.action.data === "action=rebind",
     );
-  });
-
-  it("does not offer bag OCR, which is specified and not built", () => {
-    expect(CAREGIVER_CELLS.map((c) => c.label)).not.toContain("拍藥袋");
-  });
-
-  it("shows one fixed care subject instead of offering a subject switcher", () => {
-    const subjectCell = CAREGIVER_CELLS.find((cell) => cell.data === "action=subjects");
-    expect(subjectCell).toMatchObject({
-      label: "照顧對象",
-      sub: "父親 · 固定配對",
-    });
-    expect(subjectCell?.sub).not.toContain("切換");
+    expect(rebind?.action.type).toBe("postback");
+    expect(() => assertNoLinksForElder(elderRichMenu())).not.toThrow();
   });
 });
 

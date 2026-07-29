@@ -20,19 +20,29 @@ function value(env: DemoEnv, name: string): string | null {
  * the clearer demo-specific variable names are being configured.
  */
 export function getDemoLinePair(env: DemoEnv = process.env): DemoLinePair {
-  const elderUserId =
-    value(env, "LINE_DEMO_ELDER_USER_ID") ?? value(env, "LINE_ELDER_USER_ID");
-  const caregiverUserId = value(env, "LINE_DEMO_CAREGIVER_USER_ID");
+  const explicitElder = value(env, "LINE_DEMO_ELDER_USER_ID");
+  const explicitCaregiver = value(env, "LINE_DEMO_CAREGIVER_USER_ID");
+  if ((explicitElder === null) !== (explicitCaregiver === null)) {
+    throw new Error("configure both demo LINE accounts or neither");
+  }
+
+  const elderUserId = explicitElder ?? value(env, "LINE_ELDER_USER_ID");
+  const caregiverUserId = explicitCaregiver;
 
   if (elderUserId && caregiverUserId && elderUserId === caregiverUserId) {
     throw new Error("the elder and caregiver must use different LINE accounts");
   }
 
   return {
-    subjectId: value(env, "LINE_DEMO_SUBJECT_ID") ?? DEMO_SUBJECT_ID,
+    subjectId: DEMO_SUBJECT_ID,
     elderUserId,
     caregiverUserId,
   };
+}
+
+export function hasExplicitDemoPair(env: DemoEnv = process.env): boolean {
+  const pair = getDemoLinePair(env);
+  return pair.elderUserId !== null && pair.caregiverUserId !== null;
 }
 
 export function recipientForDemoRole(

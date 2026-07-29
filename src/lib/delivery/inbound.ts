@@ -26,10 +26,11 @@
 
 import type { Delivery } from "./types";
 import { bindRole, parseRoleFromPostback } from "../roles/bind";
-import type { Role, RoleStore } from "../roles/types";
+import type { Role, RoleBinding, RoleStore } from "../roles/types";
 import {
   canClaimDemoRole,
   getDemoLinePair,
+  hasExplicitDemoPair,
   recipientForDemoRole,
 } from "./line/demo-pair";
 
@@ -96,10 +97,45 @@ export type InboundDeps = {
   };
 };
 
+/**
+ * Which actions each role may invoke.
+ *
+ * A rich menu hides the other role's buttons; it is not an authorisation
+ * boundary, because postback data is client input. This is the boundary.
+ *
+ * `summary` is in both sets on purpose: the elder generates the same QR the
+ * caregiver does, because the caregiver may have forgotten and he is already
+ * in the consulting room. `rebind` is handled before this check — it exposes
+ * nothing, and it has to stay reachable from a menu that may itself be the
+ * wrong one.
+ */
 const ROLE_ACTIONS: Record<Role, ReadonlySet<string>> = {
-  elder: new Set(["my_meds", "repeat", "how_to_ask", "reach_family"]),
-  caregiver: new Set(["note", "summary", "recent_questions", "subjects"]),
+  elder: new Set([
+    "my_meds",
+    "repeat",
+    "how_to_ask",
+    "reach_family",
+    "summary",
+    "schedule",
+  ]),
+  caregiver: new Set([
+    "note",
+    "summary",
+    "recent_questions",
+    "subjects",
+    "pair_info",
+    "log_meds",
+  ]),
 };
+
+function bindingMatchesDemo(
+  binding: Pick<RoleBinding, "channelUserId" | "role" | "subjectId">,
+): boolean {
+  return (
+    binding.subjectId === getDemoLinePair().subjectId &&
+    canClaimDemoRole(binding.channelUserId, binding.role)
+  );
+}
 
 /**
  * Resolved separately, and lazily, on purpose.
@@ -154,7 +190,7 @@ export async function handleInbound(
         return;
 
       case "follow":
-        return await sendRoleCard(msg.channelUserId, deps);
+        return await handleFollow(msg.channelUserId, deps);
 
       case "postback":
         return await handlePostback(
@@ -182,6 +218,41 @@ async function sendRoleCard(channelUserId: string, deps: InboundDeps): Promise<v
   const { roleSelectionCard } = await import("./line/role-card");
   const result = await setup.pushFlex(channelUserId, roleSelectionCard());
   console.log("[medbuddy] role card sent", { channelUserId, ok: result.ok });
+}
+
+async function handleFollow(channelUserId: string, deps: InboundDeps): Promise<void> {
+  const binding = await (await getRoleStore(deps)).get(channelUserId);
+  if (!binding) return await sendRoleCard(channelUserId, deps);
+
+  if (!bindingMatchesDemo(binding)) {
+    console.error("[medbuddy] stored role does not match demo pair", {
+      channelUserId,
+      role: binding.role,
+      subjectId: binding.subjectId,
+    });
+    return;
+  }
+
+  await linkRoleMenu(channelUserId, binding.role, deps);
+}
+
+async function linkRoleMenu(
+  channelUserId: string,
+  role: Role,
+  deps: InboundDeps,
+): Promise<void> {
+  const richMenuId = richMenuIdFor(role);
+  if (!richMenuId) {
+    console.error("[medbuddy] no rich menu id configured for role", { role });
+    return;
+  }
+
+  const linked = await (await getSetup(deps)).linkRichMenu(channelUserId, richMenuId);
+  console.log("[medbuddy] rich menu linked", {
+    channelUserId,
+    role,
+    ok: linked.ok,
+  });
 }
 
 async function handlePostback(
@@ -219,19 +290,7 @@ async function handlePostback(
       return;
     }
 
-    const richMenuId = richMenuIdFor(outcome.binding.role);
-    if (richMenuId) {
-      const linked = await (await getSetup(deps)).linkRichMenu(channelUserId, richMenuId);
-      console.log("[medbuddy] rich menu linked", {
-        channelUserId: channelUserId,
-        role: outcome.binding.role,
-        ok: linked.ok,
-      });
-    } else {
-      console.error("[medbuddy] no rich menu id configured for role", {
-        role: outcome.binding.role,
-      });
-    }
+    await linkRoleMenu(channelUserId, outcome.binding.role, deps);
     return;
   }
 
@@ -246,6 +305,15 @@ async function handlePostback(
   const role: Role = binding?.role ?? "elder";
   // An unbound sender gets the card, never an answer (§6.5).
   if (!binding || !subjectId) return await sendRoleCard(channelUserId, deps);
+
+  if (!bindingMatchesDemo(binding)) {
+    console.error("[medbuddy] refused action from binding outside demo pair", {
+      channelUserId,
+      role: binding.role,
+      subjectId: binding.subjectId,
+    });
+    return;
+  }
 
   // A rich menu hides the other role's buttons; it is not an authorisation
   // boundary. Postback data is client input, so re-check the action against the
@@ -279,6 +347,15 @@ async function handlePostback(
     case "recent_questions":
       reply = await actions.recentQuestions(subjectId);
       break;
+    case "pair_info":
+      reply = actions.furniture("pair_info");
+      break;
+    case "schedule":
+      reply = await actions.dosingSchedule(subjectId);
+      break;
+    case "log_meds":
+      reply = actions.furniture("log_meds_prompt");
+      break;
     case "reach_family":
       return await reachFamily(channelUserId, subjectId, deps);
     case "summary":
@@ -301,7 +378,24 @@ async function handleText(
 ): Promise<void> {
   const roleStore = await getRoleStore(deps);
   const binding = await roleStore.get(msg.channelUserId);
+
+  // Once the deployment has an explicit two-phone allowlist, legacy env maps
+  // are migration data, not an alternate entrance. An unbound phone must
+  // confirm its configured role through the role card.
+  if (!binding && hasExplicitDemoPair()) {
+    return await sendRoleCard(msg.channelUserId, deps);
+  }
+
   const subjectId = binding?.subjectId ?? seededSubjectIdFor(msg.channelUserId);
+
+  if (binding && !bindingMatchesDemo(binding)) {
+    console.error("[medbuddy] refused text from binding outside demo pair", {
+      channelUserId: msg.channelUserId,
+      role: binding.role,
+      subjectId: binding.subjectId,
+    });
+    return;
+  }
 
   if (!subjectId) {
     // Unknown sender: never a guessed subject (§6.5), never a composed

@@ -47,6 +47,13 @@ const FURNITURE: Record<string, string> = {
     "還沒有核對過的紀錄。\n\n請照顧者先在網頁上核對一次,之後這裡就看得到。",
   reached_family: "好,我跟家人說了。",
   no_family: "還沒有設定家人的帳號,所以沒有送出去。",
+  pair_info:
+    "本次示範使用兩支手機、固定兩個角色。\n\n這支手機是照顧者,另一支是長輩,兩邊都只連到父親的紀錄。",
+  // Bag OCR is specified (docs/MEDICATION-BAG-OCR-MIGRATION.md) and not built.
+  // The cell stays on the menu and says so, because a press that produces
+  // nothing reads to the person pressing it as their own mistake.
+  log_meds_prompt:
+    "拍藥袋這個功能還沒開放。\n\n目前請先在網頁上核對用藥,長輩那邊的「我的藥」就會跟著更新。",
 };
 
 export function furniture(key: keyof typeof FURNITURE | string): ActionReply {
@@ -112,4 +119,45 @@ export async function recentQuestions(subjectId: string): Promise<ActionReply> {
   }
   const lines = asked.map((o) => `・${o.note}`);
   return { text: `最近問過:\n\n${lines.join("\n")}`, fromPipeline: false };
+}
+
+/**
+ * When to take what.
+ *
+ * Reads dosing times captured from medication bags. Nothing else in the
+ * product knows a dosing time — the register holds indications, not
+ * schedules — so until bag OCR lands this has no source and says so.
+ *
+ * **It does not fall back to a plausible schedule.** 「早上一顆、晚上一顆」
+ * assembled from nothing would be a product inventing a prescription, and a
+ * person would follow it. An empty answer is a gap; a guessed one is a hazard.
+ */
+export async function dosingSchedule(subjectId: string): Promise<ActionReply> {
+  const { getRegistry } = await import("../registry");
+  const { logStore } = getRegistry();
+  const log = await logStore.read(subjectId);
+  const latest = log.snapshots.at(-1);
+
+  if (!latest) return furniture("nothing_yet");
+
+  // `dosing` is written by bag OCR. Optional on the type, absent everywhere
+  // until that ships, which is why this reads defensively rather than
+  // assuming the field.
+  const withTimes = latest.items.filter(
+    (item) => (item as { dosing?: unknown }).dosing !== undefined,
+  );
+
+  if (withTimes.length === 0) {
+    return {
+      text:
+        "還沒有用藥時間的資料。\n\n" +
+        "用藥時間是從藥袋上讀來的,照顧者用「紀錄用藥」拍過藥袋之後,這裡就會列出每天什麼時候吃、飯前還是飯後。\n\n" +
+        "沒有資料的時候我不會自己編一個時間表。",
+      fromPipeline: false,
+    };
+  }
+
+  // Deliberately unreachable until OCR writes `dosing`. Left as the seam
+  // rather than as a comment so the shape is settled before the data arrives.
+  return { text: "", fromPipeline: false };
 }

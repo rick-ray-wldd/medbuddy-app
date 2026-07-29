@@ -65,6 +65,24 @@ describe("adding the bot", () => {
     await handleInbound(msg({ kind: "follow" }), { roleStore: store, setup });
     expect(flex).toEqual([{ userId: "U-someone" }]);
   });
+
+  it("restores the saved rich menu instead of asking an already-bound phone again", async () => {
+    await store.put({
+      channelUserId: "U-father",
+      role: "elder",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+    const { setup, flex, links } = fakeSetup();
+
+    await handleInbound(msg({ kind: "follow" }, "U-father"), {
+      roleStore: store,
+      setup,
+    });
+
+    expect(flex).toEqual([]);
+    expect(links).toEqual([{ userId: "U-father", richMenuId: "rm-elder" }]);
+  });
 });
 
 describe("answering the card", () => {
@@ -89,7 +107,6 @@ describe("answering the card", () => {
   });
 
   it("always records either phone against the one demo subject", async () => {
-    vi.stubEnv("LINE_DEMO_SUBJECT_ID", "subj-father");
     vi.stubEnv("LINE_USER_SUBJECT_MAP", "U-daughter:subj-mother");
     const { setup } = fakeSetup();
 
@@ -197,6 +214,23 @@ describe("an unbound sender", () => {
     expect(calls).toHaveLength(0);
     expect(flex).toEqual([{ userId: "U-stranger" }]);
   });
+
+  it("cannot use a legacy subject map once the two demo phones are allowlisted", async () => {
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "U-father");
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
+    vi.stubEnv("LINE_USER_SUBJECT_MAP", "U-stranger:subj-father");
+    const { delivery, calls } = fakeDelivery();
+    const { setup, flex } = fakeSetup();
+
+    await handleInbound(msg({ kind: "text", text: "普拿疼" }, "U-stranger"), {
+      roleStore: store,
+      delivery,
+      setup,
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(flex).toEqual([{ userId: "U-stranger" }]);
+  });
 });
 
 describe("menu presses", () => {
@@ -228,6 +262,7 @@ describe("menu presses", () => {
   });
 
   it("找家人 reaches the one configured caregiver phone", async () => {
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "U-father");
     vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
     const { delivery, calls } = fakeDelivery();
     const { setup } = fakeSetup();
@@ -260,6 +295,26 @@ describe("menu presses", () => {
 
     await handleInbound(
       msg({ kind: "postback", data: "action=subjects" }, "U-father"),
+      { roleStore: store, delivery, setup },
+    );
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects a stale binding that belongs to neither configured demo phone", async () => {
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "U-father");
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
+    await store.put({
+      channelUserId: "U-old-demo-phone",
+      role: "elder",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+    const { delivery, calls } = fakeDelivery();
+    const { setup } = fakeSetup();
+
+    await handleInbound(
+      msg({ kind: "postback", data: "action=my_meds" }, "U-old-demo-phone"),
       { roleStore: store, delivery, setup },
     );
 
@@ -299,5 +354,148 @@ describe("a voice message", () => {
 
     // Until STT is a product decision, answering would mean guessing.
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("switching role from the menu, end to end", () => {
+  beforeEach(() => {
+    vi.stubEnv("MEDBUDDY_ALLOW_ROLE_SWITCH", "true");
+    // Neither demo id configured — one phone walking through both sides.
+    //
+    // `getDemoLinePair` insists on both ids or neither, and refuses to accept
+    // the same id twice, so there are exactly two shapes: two named phones
+    // each locked to a role, or an open channel where any phone may hold
+    // either. A single phone demonstrating both is the second shape, and the
+    // cost is stated rather than hidden — with no ids configured, any phone
+    // that finds the bot can bind. That is acceptable for a demo channel and
+    // is not acceptable for real families, which is the same line
+    // MEDBUDDY_ALLOW_ROLE_SWITCH draws.
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "");
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "");
+  });
+
+  it("切換身分 sends the card, and answering it relinks the other menu", async () => {
+    const { setup, flex, links } = fakeSetup();
+
+    // Bound as elder, on the elder menu.
+    await handleInbound(
+      msg({ kind: "postback", data: "action=bind&role=elder" }, "U-father"),
+      { roleStore: store, setup },
+    );
+    expect(links.at(-1)).toEqual({ userId: "U-father", richMenuId: "rm-elder" });
+
+    // Presses 切換身分 → the card comes back.
+    await handleInbound(msg({ kind: "postback", data: "action=rebind" }, "U-father"), {
+      roleStore: store,
+      setup,
+    });
+    expect(flex.at(-1)).toEqual({ userId: "U-father" });
+
+    // Answers 我是照顧者 → binding moves and the caregiver menu is linked.
+    await handleInbound(
+      msg({ kind: "postback", data: "action=bind&role=caregiver" }, "U-father"),
+      { roleStore: store, setup },
+    );
+    expect(await store.get("U-father")).toMatchObject({ role: "caregiver" });
+    expect(links.at(-1)).toEqual({ userId: "U-father", richMenuId: "rm-caregiver" });
+  });
+
+  it("rebind stays reachable even from a menu that is already wrong", async () => {
+    // 切換身分 is handled before the role/action whitelist, because a menu
+    // showing the wrong role is exactly when the escape hatch is needed.
+    const { setup, flex } = fakeSetup();
+    await store.put({
+      channelUserId: "U-father",
+      role: "elder",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+
+    await handleInbound(msg({ kind: "postback", data: "action=rebind" }, "U-father"), {
+      roleStore: store,
+      setup,
+    });
+    expect(flex).toHaveLength(1);
+  });
+});
+
+describe("actions the two menus now carry", () => {
+  beforeEach(() => {
+    vi.stubEnv("LINE_DEMO_ELDER_USER_ID", "U-father");
+    vi.stubEnv("LINE_DEMO_CAREGIVER_USER_ID", "U-daughter");
+  });
+
+  it("用藥提醒 says there is no schedule rather than inventing one", async () => {
+    // The hazard this avoids: 「早上一顆、晚上一顆」 assembled from nothing is
+    // the product writing a prescription, and he would follow it.
+    const { delivery, calls } = fakeDelivery();
+    const { setup } = fakeSetup();
+    await store.put({
+      channelUserId: "U-father",
+      role: "elder",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+
+    await handleInbound(msg({ kind: "postback", data: "action=schedule" }, "U-father"), {
+      roleStore: store,
+      delivery,
+      setup,
+    });
+
+    expect(calls).toHaveLength(1);
+    const text = calls[0].message.text;
+    expect(text).toContain("還沒");
+    // No time of day, no count, no meal relation — nothing that could be
+    // mistaken for an instruction.
+    for (const invented of ["早上", "中午", "晚上", "睡前", "一顆", "兩顆"]) {
+      expect(text, invented).not.toContain(invented);
+    }
+  });
+
+  it("紀錄用藥 answers that bag OCR is not open yet", async () => {
+    const { delivery, calls } = fakeDelivery();
+    const { setup } = fakeSetup();
+    await store.put({
+      channelUserId: "U-daughter",
+      role: "caregiver",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+
+    await handleInbound(msg({ kind: "postback", data: "action=log_meds" }, "U-daughter"), {
+      roleStore: store,
+      delivery,
+      setup,
+    });
+
+    // A press that produces nothing reads as the user's own mistake.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].message.text).toContain("還沒開放");
+  });
+
+  it("an elder may generate the summary QR himself", async () => {
+    // The caregiver may have forgotten and he is already in the room.
+    const { setup } = fakeSetup();
+    await store.put({
+      channelUserId: "U-father",
+      role: "elder",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+
+    // Reaches the handler rather than being refused by the role whitelist;
+    // delivery itself needs network, so only the absence of a refusal is
+    // asserted here.
+    const errors: unknown[][] = [];
+    vi.mocked(console.error).mockImplementation((...args) => void errors.push(args));
+
+    await handleInbound(msg({ kind: "postback", data: "action=summary" }, "U-father"), {
+      roleStore: store,
+      setup,
+    });
+
+    const refused = errors.some((e) => String(e[0]).includes("outside bound role"));
+    expect(refused).toBe(false);
   });
 });

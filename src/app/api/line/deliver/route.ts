@@ -32,13 +32,11 @@ import {
   recipientForDemoRole,
 } from "@/lib/delivery/line/demo-pair";
 import type { ItemSource } from "@/lib/grounding/types";
-import type { NarrationAudience } from "@/lib/narration/types";
 import type { DeliveryMessage } from "@/lib/delivery/types";
 
 type Body = {
   subjectId?: string;
   items?: { text: string; source?: ItemSource }[];
-  audience?: NarrationAudience;
   /** Fish external voice id of a calibrated caregiver voice (optional) */
   voiceId?: string;
 };
@@ -77,8 +75,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // Same pipeline as /api/check — grounding → rules → verdict → narration.
   const submitted = (body.items ?? []).filter((i) => i.text.trim().length > 0);
-  const audience: NarrationAudience =
-    body.audience === "caregiver" ? "caregiver" : "elder";
   const { resolver, ruleSets, classes, knownMedicines } = getRegistry();
   const verdict = buildVerdict(
     {
@@ -91,7 +87,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     ruleSets,
     classes,
   );
-  const outcome = await narrate(verdict, audience, null, knownMedicines);
+  // This route has exactly one recipient and one projection: elder. Accepting
+  // an audience from the request would let a caller send caregiver-only prose
+  // to the elder account while labelling the transport as caregiver.
+  const outcome = await narrate(verdict, "elder", null, knownMedicines);
 
   // VERBATIM join — the adapter must receive exactly what narration produced.
   const text = outcome.narration.segments.map((s) => s.text).join("\n");
@@ -154,7 +153,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const result = await delivery.send(
     {
       channelUserId: to,
-      role: audience === "caregiver" ? "caregiver" : "elder",
+      role: "elder",
       subject: { id: subject.id, displayName: subject.displayName },
     },
     speech ? { text, speech } : { text },

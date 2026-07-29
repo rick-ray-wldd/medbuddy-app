@@ -116,10 +116,15 @@ export async function lastCheckNarration(
       ? new BlobScheduleStore()
       : new InMemoryScheduleStore();
     const schedule = await store.get(subjectId).catch(() => null);
+    const { findSubject } = await import("../subjects");
     text = frameMyMeds(narration, {
       slotTimes: (schedule?.slots ?? [])
         .filter((slot) => slot.enabled)
         .map((slot) => slot.timeOfDay),
+      // Drives the movement aside: warmth by default, silence where the
+      // record says encouraging more walking needs a fall-risk assessment
+      // this product does not have.
+      conditions: findSubject(subjectId)?.conditions ?? [],
     });
   }
   // VOICE-DELIVERY-SPEC §5 — an empty narration is sent as nothing, never as a

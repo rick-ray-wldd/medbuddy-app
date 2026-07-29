@@ -4,6 +4,7 @@ import {
   frameMyMeds,
   frameReminder,
   greetingForHour,
+  movementAsideFor,
   taipeiMinutesOfDay,
 } from "./reminder-framing";
 
@@ -142,5 +143,82 @@ describe("我的藥, answered in her voice", () => {
     expect(() => assertNoSelfReport(framed)).not.toThrow();
     expect(framed).not.toContain("謝謝");
     expect(framed).not.toContain("很棒");
+  });
+});
+
+describe("what the bag said, and only what it said", () => {
+  const MORNING = new Date("2026-07-29T01:00:00Z");
+
+  it("reads out meal relation and dose when a bag printed them", () => {
+    const framed = frameMyMeds(NARRATION, {
+      slotTimes: [],
+      now: MORNING,
+      intake: [{ name: "克他服寧", mealRelation: "飯後", dose: "1 粒" }],
+    });
+    expect(framed).toContain("克他服寧 —— 飯後 1 粒");
+  });
+
+  it("says nothing about meals when the bag did not print it", () => {
+    // All three real bags left timing not_visible. Silence is the honest
+    // answer; 「飯後」 supplied from common practice is the product writing an
+    // instruction he would follow.
+    const framed = frameMyMeds(NARRATION, { slotTimes: [], now: MORNING });
+    for (const invented of ["飯前", "飯後", "睡前", "藥袋上是這樣寫的"]) {
+      expect(framed, invented).not.toContain(invented);
+    }
+  });
+
+  it("orders only when the bag numbered the rows", () => {
+    const framed = frameMyMeds(NARRATION, {
+      slotTimes: [],
+      now: MORNING,
+      intake: [
+        { name: "B藥", dose: "1 粒", printedOrder: 2 },
+        { name: "A藥", dose: "1 粒", printedOrder: 1 },
+      ],
+    });
+    expect(framed.indexOf("A藥")).toBeLessThan(framed.indexOf("B藥"));
+  });
+
+  it("does not invent a sequence when the bag numbered nothing", () => {
+    // Nothing in this product knows which medicine to take first. A list is a
+    // list; presenting it as an order would be ours rather than his doctor's.
+    const framed = frameMyMeds(NARRATION, {
+      slotTimes: [],
+      now: MORNING,
+      intake: [
+        { name: "先吃的", dose: "1 粒" },
+        { name: "後吃的", dose: "1 粒" },
+      ],
+    });
+    // Scoped to the intake list, because the greeting legitimately contains
+    // 先 ("先來看一下"). What must not appear is sequencing INSIDE the list.
+    const list = framed.split("藥袋上是這樣寫的:")[1]?.split("\n\n")[0] ?? "";
+    expect(list).toContain("先吃的");
+    for (const sequencing of ["接著", "再吃", "然後", "第一步", "順序"]) {
+      expect(list, sequencing).not.toContain(sequencing);
+    }
+    // And the list keeps the order it was given rather than claiming one.
+    expect(list.indexOf("先吃的")).toBeLessThan(list.indexOf("後吃的"));
+  });
+});
+
+describe("the movement aside", () => {
+  const MORNING = new Date("2026-07-29T01:00:00Z");
+
+  it("is there for most people", () => {
+    expect(movementAsideFor(["chronic_liver_disease"])).toContain("走一走");
+  });
+
+  it("is silent for someone whose record says he falls", () => {
+    // Encouraging more walking is exactly what a fall-risk assessment exists
+    // to qualify, and this product does not have one.
+    expect(movementAsideFor(["recurrent_falls"])).toBe("");
+    const framed = frameMyMeds(NARRATION, {
+      slotTimes: [],
+      now: MORNING,
+      conditions: ["recurrent_falls"],
+    });
+    expect(framed).not.toContain("走一走");
   });
 });

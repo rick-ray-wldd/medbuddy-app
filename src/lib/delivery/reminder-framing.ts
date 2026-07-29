@@ -139,11 +139,83 @@ export function assertNoSelfReport(text: string): void {
  * distinct clip to synthesise and store. Three buys "早/午/晚 安" — enough
  * that it fits the day — and a fourth would buy nothing he would notice.
  */
+/**
+ * A warmer opening, still bounded.
+ *
+ * Audio is keyed by the hash of its text, so every distinct greeting is a
+ * distinct clip. Three buys 早/午/晚 — enough that it fits the day — and a
+ * fourth buys nothing he would notice.
+ */
 const GREETINGS: { untilMinutes: number; text: string }[] = [
-  { untilMinutes: 11 * 60, text: "阿公早,今天的藥在這裡。" },
-  { untilMinutes: 18 * 60, text: "阿公午安,今天的藥在這裡。" },
-  { untilMinutes: 24 * 60, text: "阿公晚安,今天的藥在這裡。" },
+  { untilMinutes: 11 * 60, text: "阿公早!今天還好嗎?先來看一下今天要吃的藥。" },
+  { untilMinutes: 18 * 60, text: "阿公午安!來看一下今天的藥。" },
+  { untilMinutes: 24 * 60, text: "阿公晚安!今天的藥在這裡。" },
 ];
+
+/**
+ * What we know about taking one item, when a bag actually said so.
+ *
+ * Every field optional and every one silent when absent. Bag OCR fills these
+ * (`ocr/types.ts`); nothing else in the product knows them, because the drug
+ * register holds indications rather than instructions.
+ */
+export type IntakeDetail = {
+  name: string;
+  /** "飯前" / "飯後" / "睡前" — copied from the bag, never inferred. */
+  mealRelation?: string;
+  /** "1 顆" — the bag's own words. */
+  dose?: string;
+  /**
+   * Position in a sequence the BAG printed, e.g. a numbered row.
+   *
+   * ⚠️ Never derived. Nothing in this product knows which medicine to take
+   * first, and an order assembled from a list is the product writing a
+   * prescription — he would follow it, and it would be ours rather than his
+   * doctor's.
+   */
+  printedOrder?: number;
+};
+
+function intakeLines(items: IntakeDetail[]): string {
+  const known = items.filter((i) => i.mealRelation || i.dose);
+  if (known.length === 0) return "";
+
+  // Ordered only when the bag numbered them. Otherwise printed order is the
+  // bag's own layout, which is not a clinical sequence either — so the list
+  // simply reads as a list.
+  const ordered = known.every((i) => i.printedOrder !== undefined)
+    ? [...known].sort((a, b) => (a.printedOrder ?? 0) - (b.printedOrder ?? 0))
+    : known;
+
+  const lines = ordered.map((i) => {
+    const parts = [i.mealRelation, i.dose].filter(Boolean).join(" ");
+    return `・${i.name}${parts ? ` —— ${parts}` : ""}`;
+  });
+
+  return `\n\n藥袋上是這樣寫的:\n${lines.join("\n")}`;
+}
+
+/**
+ * A granddaughter's aside, and the one condition that removes it.
+ *
+ * 「起來走一走」 is ordinary family talk and it is also, said by a system to a
+ * 72-year-old alongside his medication, unsolicited health advice. For most
+ * people that is harmless warmth. For someone whose record carries
+ * `recurrent_falls` it is not — encouraging more walking is precisely the
+ * thing a fall-risk assessment exists to qualify, and this product does not
+ * have one.
+ *
+ * So it is warmth by default and silence where the record says otherwise,
+ * which is the same shape as every other decision here: the system may say
+ * something general, and stops as soon as the general stops being safe.
+ */
+const MOVEMENT_ASIDE = "有空的話起來走一走,不要坐太久。";
+
+const NO_MOVEMENT_ADVICE: string[] = ["recurrent_falls"];
+
+export function movementAsideFor(conditions: readonly string[]): string {
+  return conditions.some((c) => NO_MOVEMENT_ADVICE.includes(c)) ? "" : MOVEMENT_ASIDE;
+}
 
 export function greetingForHour(minutesOfDay: number): string {
   return (
@@ -154,9 +226,8 @@ export function greetingForHour(minutesOfDay: number): string {
 /**
  * Minutes since midnight in Taipei.
  *
- * His day, not the server's. A Vercel lambda in Washington greeting him with
- * 早安 at nine in the evening is the kind of wrong that makes a product feel
- * like it is talking past you.
+ * His day, not the server's. A lambda in Washington greeting him 早安 at nine
+ * in the evening is a product talking past him.
  */
 export function taipeiMinutesOfDay(now: Date): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -172,10 +243,18 @@ export function taipeiMinutesOfDay(now: Date): number {
 
 export function frameMyMeds(
   narration: string,
-  options: { slotTimes: string[]; now?: Date },
+  options: {
+    slotTimes: string[];
+    now?: Date;
+    /** Filled by bag OCR. Absent means the frame says nothing about intake. */
+    intake?: IntakeDetail[];
+    /** Drives the movement aside; see movementAsideFor. */
+    conditions?: readonly string[];
+  },
 ): string {
   const greeting = greetingForHour(taipeiMinutesOfDay(options.now ?? new Date()));
   const body = dropLeadingSalutation(narration);
+  const intake = intakeLines(options.intake ?? []);
 
   const times =
     options.slotTimes.length > 0
@@ -185,7 +264,10 @@ export function frameMyMeds(
           .join("\n")}\n時間到我會提醒您。`
       : "";
 
-  // No sign-off asking him anything, and none thanking him for taking it —
-  // both would turn an answer into a small examination.
-  return `${greeting}\n\n${body}${times}\n\n有想問的再跟我說一聲就好。`;
+  const aside = movementAsideFor(options.conditions ?? []);
+  const closing = aside
+    ? `\n\n${aside}有想問的再跟我說一聲就好。`
+    : "\n\n有想問的再跟我說一聲就好。";
+
+  return `${greeting}\n\n${body}${intake}${times}${closing}`;
 }

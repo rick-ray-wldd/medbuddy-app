@@ -39,7 +39,7 @@ const client = new LineSetupClient({ channelAccessToken: token });
 const root = process.cwd();
 
 const elder = elderRichMenu();
-const caregiver = caregiverRichMenu();
+const caregiver = caregiverRichMenu(baseUrl);
 
 // Belt and braces: the rule that an elder is never sent a link is enforced in
 // code rather than trusted to the definition above staying correct.

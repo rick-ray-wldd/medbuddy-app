@@ -48,7 +48,7 @@ describe("the elder's menu", () => {
 });
 
 describe("the caregiver's menu", () => {
-  const menu = caregiverRichMenu();
+  const menu = caregiverRichMenu("https://medbuddy-app.vercel.app");
 
   it("gives six targets and tiles the menu", () => {
     // Went 2×3 → 2×2 when dead cells came off (a control with nothing to
@@ -61,9 +61,18 @@ describe("the caregiver's menu", () => {
     expect(covered).toBe(2500 * 1686);
   });
 
-  it("carries no link now that the webview cell is gone", () => {
-    expect(menu.areas.every((a) => a.action.type === "postback")).toBe(true);
+  it("carries exactly one link, and it points at our own dashboard", () => {
+    // The asymmetry the whole design turns on: §6.1 refuses an older adult a
+    // link because he taps without checking, and a caregiver has no such
+    // constraint. assertNoLinksForElder keeps that one-directional.
+    const uris = menu.areas.filter((a) => a.action.type === "uri");
+    expect(uris).toHaveLength(1);
+    expect(uris[0].action.type === "uri" && uris[0].action.uri).toBe(
+      "https://medbuddy-app.vercel.app/",
+    );
+    expect(() => assertNoLinksForElder(elderRichMenu())).not.toThrow();
   });
+
 
   it("offers exactly the six features the demo implements", () => {
     expect(CAREGIVER_CELLS.map((c) => c.label)).toEqual([
@@ -71,7 +80,7 @@ describe("the caregiver's menu", () => {
       "紀錄用藥",
       "產生回診單",
       "服藥提醒",
-      "傳說明",
+      "儀表板",
       "切換身分",
     ]);
   });

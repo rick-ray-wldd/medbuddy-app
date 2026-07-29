@@ -117,7 +117,11 @@ export const CAREGIVER_CELLS: Cell[] = [
   // In-LINE schedule editing + the caregiver-initiated send (§6.2) — the two
   // outbound controls live on the phone as well as the web dashboard.
   { label: "服藥提醒", sub: "固定時間自動傳語音", icon: "clock", data: "action=reminders" },
-  { label: "傳說明", sub: "立刻把用藥說明傳給長輩", icon: "speaker", data: "action=send_explanation" },
+  // A link, which only the caregiver may have: §6.1 refuses an older adult one
+  // because he taps without checking. Everything a caregiver needs depth for
+  // — the running record, the elder's screen, the QR — is on one page, and
+  // rebuilding that out of LINE messages would be strictly worse.
+  { label: "儀表板", sub: "看紀錄與回診單", icon: "window", uri: "" },
   { label: "切換身分", sub: "重新選擇", icon: "swap", data: "action=rebind" },
 ];
 
@@ -155,13 +159,18 @@ export function elderRichMenu(): RichMenuDefinition {
   };
 }
 
-export function caregiverRichMenu(): RichMenuDefinition {
+export function caregiverRichMenu(
+  baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim() ?? "",
+): RichMenuDefinition {
+  const cells = CAREGIVER_CELLS.map((c) =>
+    c.uri !== undefined ? { ...c, uri: `${baseUrl.replace(/\/$/, "")}/` } : c,
+  );
   return {
     size: FULL,
     selected: true,
     name: "medbuddy-caregiver",
     chatBarText: "照顧工具",
-    areas: grid(CAREGIVER_CELLS, 3, 2),
+    areas: grid(cells, 3, 2),
   };
 }
 

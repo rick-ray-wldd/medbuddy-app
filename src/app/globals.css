@@ -1052,3 +1052,56 @@ a {
   color: var(--muted);
   margin: 0;
 }
+
+/* The running observation record. Dense on purpose: it is checked, not read. */
+.obs-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.9375rem;
+}
+
+.obs-log li {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.obs-kind {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* Self-medication and missed doses are what change a prescription, so they
+   are the two a caregiver's eye should land on first. */
+.obs-self_medication { background: #fdf0e1; color: #6b4212; }
+.obs-missed_dose { background: #fbe9e9; color: #6d2020; }
+.obs-alcohol { background: #f0eef7; color: #3f3560; }
+.obs-symptom { background: #e7eefb; color: #1c3a68; }
+.obs-other { background: #eef1f0; color: #3d4a47; }
+
+.obs-when {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.obs-note { color: var(--foreground); }
+
+.obs-via {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}

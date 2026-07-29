@@ -83,11 +83,17 @@ describe("the role card", () => {
   const card = roleSelectionCard();
   const json = JSON.stringify(card);
 
-  it("frames both options as an intention rather than a category", () => {
-    expect(json).toContain("我要看我自己的藥");
-    expect(json).toContain("我要幫家人看藥");
-    // The humiliation this avoids: a button that files him under the old ones.
-    expect(json).not.toContain("我是長輩");
+  it("names the role in the heading and the intention underneath", () => {
+    // A reversal from the first version, which used intentions only. A
+    // reviewer meeting this card for ninety seconds has to see at a glance
+    // that the interface forks here; an intention-framed heading is kinder
+    // and slower to read, and slower loses when the reader is evaluating.
+    expect(json).toContain("我是長輩");
+    expect(json).toContain("我是照顧者");
+    // The intention is not dropped, only demoted to the second line — it is
+    // what he is actually choosing.
+    expect(json).toContain("看我自己在吃的藥");
+    expect(json).toContain("幫家人核對用藥");
   });
 
   it("leaves no utterance in his thread", () => {
@@ -97,8 +103,10 @@ describe("the role card", () => {
   });
 
   it("carries an altText that stands alone in a notification", () => {
-    expect(card.altText.length).toBeGreaterThan(10);
-    expect(card.altText).toContain("我要");
+    // For a recipient on a lock screen, or using a screen reader, this IS the
+    // card — so it has to carry the question and both answers, not a label.
+    expect(card.altText).toContain("我是長輩");
+    expect(card.altText).toContain("我是照顧者");
   });
 
   it("binds through postback data the server re-checks", () => {

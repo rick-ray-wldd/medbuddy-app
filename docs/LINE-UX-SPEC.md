@@ -44,25 +44,43 @@ then never again.
 ┌───────────────────────────────────────┐
 │  MedBuddy                             │
 │  幫忙看懂家裡的藥                        │
+│  請問您是?                             │
 ├───────────────────────────────────────┤
 │                                       │
 │   ┌─────────────────────────────┐     │
-│   │  💊  我要看我自己的藥         │     │
+│   │  我是長輩                     │     │
+│   │  看我自己在吃的藥              │     │
 │   └─────────────────────────────┘     │
 │                                       │
 │   ┌─────────────────────────────┐     │
-│   │  👨‍👩‍👧  我要幫家人看藥          │     │
+│   │  我是照顧者                   │     │
+│   │  幫家人核對用藥、產生回診單     │     │
 │   └─────────────────────────────┘     │
 │                                       │
 └───────────────────────────────────────┘
 ```
 
-### Framed by what they want, not by who they are
+### The heading names the role; the line under it names the intention
 
-**「我要看我自己的藥」, not 「我是長輩」.** Asking a 72-year-old to tap a button
-that categorises him as the old person is a small humiliation at the first
-screen, and the first screen is where products lose people. Both options
-describe an intention, which everyone can answer without conceding anything.
+**This is a reversal, and the earlier position is kept here rather than
+deleted, because it is the one that should win eventually.**
+
+The first version used intentions only — 「我要看我自己的藥」 rather than
+「我是長輩」. Asking a 72-year-old to tap a button that categorises him as the
+old person is a small humiliation at the first screen, and the first screen is
+where products lose people.
+
+That reasoning still holds for the product. It lost to a different reader. Someone
+meeting this card for ninety seconds — a reviewer, an interviewer, anyone being
+shown the thing rather than using it — has to see immediately that there are two
+audiences and that the entire interface forks here. An intention-framed heading
+is kinder and slower to parse, and slower to parse is fatal when the reader is
+evaluating rather than living with it.
+
+So the card carries both: the role as the heading a stranger reads at a glance,
+the intention underneath as what is actually being chosen. **If this ships to
+real families, the heading goes back to the intention** — the dignity argument
+does not stop being true because a demo needed legibility.
 
 ### It is a binding, not a mode
 

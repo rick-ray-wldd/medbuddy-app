@@ -500,44 +500,48 @@ describe("LineDelivery.send() audio outbound (§7, Step 4)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("AudioStore failure → audio-hosting-failed (retryable), nothing sent", async () => {
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const store = {
-        put: vi.fn(async () => {
-          throw new Error("blob unavailable");
-        }),
-      };
-      const { fetchMock } = pushCapture(200);
-      const res = await deliveryWithStore(store, fetchMock).send(
-        target("caregiver"),
-        { text: "王伯伯的語音說明。", speech: speech() },
-      );
-      expect(res).toEqual({
-        ok: false,
-        reason: "audio-hosting-failed",
-        retryable: true,
-      });
-      expect(fetchMock).not.toHaveBeenCalled();
-    } finally {
-      errSpy.mockRestore();
-    }
+  it("AudioStore failure → text still goes, without the audio", async () => {
+    // Was "nothing sent". Failing the whole message made an older adult press
+    // a button and watch nothing happen, which he reads as his own mistake.
+    // The explanation is correct as text and was produced by the rules either
+    // way; audio is an addition to it.
+    const store = mockStore();
+    store.put.mockRejectedValueOnce(new Error("blob down"));
+    const { fetchMock, captured } = pushCapture(200);
+
+    const res = await deliveryWithStore(store, fetchMock).send(target("elder"), {
+      text: "父親好,這是您現在在吃的藥。",
+      speech: speech({}),
+    });
+
+    expect(res.ok).toBe(true);
+    const body = JSON.parse(String(captured.init?.body));
+    expect(body.messages.map((m: { type: string }) => m.type)).toEqual(["text"]);
+    expect(body.messages[0].text).toBe("父親好,這是您現在在吃的藥。");
   });
 
-  it("non-HTTPS hosted URL → refused, nothing sent (health information)", async () => {
-    const store = mockStore("http://insecure.example/audio.m4a");
-    const { fetchMock } = pushCapture(200);
-    const res = await deliveryWithStore(store, fetchMock).send(
-      target("caregiver"),
-      { text: "王伯伯的語音說明。", speech: speech() },
-    );
-    expect(res).toEqual({
-      ok: false,
-      reason: "audio-url-not-https",
-      retryable: false,
+  it("non-HTTPS hosted URL → audio dropped, text still goes", async () => {
+    // §7 still refuses to put health information on plain http. What changed
+    // is that refusing the audio no longer refuses the message.
+    const store = mockStore();
+    store.put.mockResolvedValueOnce({
+      url: "http://insecure.example/a.mp3",
+      expiresAt: new Date(Date.now() + 60_000),
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    const { fetchMock, captured } = pushCapture(200);
+
+    const res = await deliveryWithStore(store, fetchMock).send(target("elder"), {
+      text: "父親好,這是您現在在吃的藥。",
+      speech: speech({}),
+    });
+
+    expect(res.ok).toBe(true);
+    expect(String(captured.init?.body)).not.toContain("http://insecure.example");
+    const body = JSON.parse(String(captured.init?.body));
+    expect(body.messages.map((m: { type: string }) => m.type)).toEqual(["text"]);
   });
+
+
 });
 
 // ---------- Step 4: signed short-lived audio URLs ----------

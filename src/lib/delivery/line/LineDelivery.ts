@@ -112,17 +112,28 @@ export class LineDelivery implements Delivery {
         console.error("[line-adapter] audio hosting failed", {
           reason: err instanceof Error ? err.message : "unknown",
         });
-        return { ok: false, reason: "audio-hosting-failed", retryable: true };
+        // Text-only rather than nothing. The explanation is correct as text
+        // and was produced by the rules either way; audio is an addition to
+        // it. Failing the whole send made an older adult press a button and
+        // watch nothing happen, which reads to him as his own mistake — the
+        // one outcome this product spends the most effort avoiding.
+        //
+        // Not retryable-as-a-whole for the same reason: the message went.
+        hosted = null;
       }
-      if (!hosted.url.startsWith("https://")) {
+      if (hosted && !hosted.url.startsWith("https://")) {
         // §7: LINE requires HTTPS; health information must never travel plain.
-        return { ok: false, reason: "audio-url-not-https", retryable: false };
+        // Dropped rather than sent, and the text still goes.
+        console.error("[line-adapter] audio url not https — text only");
+        hosted = null;
       }
-      audioMessage = {
-        type: "audio",
-        originalContentUrl: hosted.url,
-        duration: message.speech.durationMs,
-      };
+      if (hosted) {
+        audioMessage = {
+          type: "audio",
+          originalContentUrl: hosted.url,
+          duration: message.speech.durationMs,
+        };
+      }
     }
 
     // Push endpoint verified 2026-07-28: POST https://api.line.me/v2/bot/message/push

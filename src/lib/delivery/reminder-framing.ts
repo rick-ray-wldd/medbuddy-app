@@ -339,9 +339,28 @@ export function frameMyMedsWarm(input: WarmMyMeds): string {
 
   const meds = lines.length > 0 ? `\n\n今天要吃的是:\n${lines.join("\n")}` : "";
 
-  // Verbatim, and given its own breath so it is not read past.
+  /**
+   * A finding is announced, not recited.
+   *
+   * The rule's `verbatim` is its English statement of why it fired — written
+   * for whoever audits the rule set, and it reached him in English before this
+   * check existed. Translating it here would be the product writing a medical
+   * sentence in its own words, which is the one thing it must never do.
+   *
+   * So he is told there is something to ask about, and the regulator's actual
+   * wording stays where a pharmacist will read it: the caregiver's dashboard
+   * and the clinician's sheet. That is the same escalation the whole product
+   * is built on — hand it to a person, do not dump it on him.
+   *
+   * Chinese warning text, when a rule carries it, is spoken as-is.
+   */
+  const speakable = input.warnings.filter((w) => /[\u4e00-\u9fff]/.test(w));
   const warnings =
-    input.warnings.length > 0 ? `\n\n這個要特別注意:\n${input.warnings.join("\n")}` : "";
+    speakable.length > 0
+      ? `\n\n這個要特別注意:\n${speakable.join("\n")}`
+      : input.warnings.length > 0
+        ? "\n\n有一項想請藥師幫忙看一下,家人會陪您一起問。"
+        : "";
 
   const times = nextSlotLine(input.slotTimes, input.now ?? new Date(), input.items);
 

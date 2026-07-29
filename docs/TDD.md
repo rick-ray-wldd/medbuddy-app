@@ -476,7 +476,7 @@ an isolated synthetic demo channel, deployment checks must refuse it outside tha
 | Vercel Blob | medication logs, observations, role IDs, schedules, audio, QR | token/config or direct Blob store | SDK defaults; no app timeout; overwrite | mixed empty/null/throw semantics | retention, deletion, residency, transactionality, audit |
 | LINE Messaging | user IDs, inbound text/audio metadata; outbound health text/audio/QR | LINE credentials | no app timeout; webhook provider retries | HMAC inbound; adapter checks elder links | provider retention, queue, durable dedupe, consent |
 | Gemini | caregiver paragraph | `GEMINI_API_KEY` | no app timeout/retry; mutable `gemini-flash-latest` | kind + substring check; whole-text fallback | retention, region, model-version governance |
-| Anthropic | original medication-bag image, which may visibly contain identifiers | `ANTHROPIC_API_KEY` and anonymous route call | no app timeout/retry | structured extraction + evidence check; failure response | de-identification, quota, retention, consent, abuse prevention |
+| Anthropic | original medication-bag image, which may visibly contain identifiers | `ANTHROPIC_API_KEY` and anonymous route call | no app timeout/retry | structured output + model-response self-consistency check; human review | pixel provenance, de-identification, quota, retention, consent, abuse prevention |
 | Fish Audio | narration text; calibration samples if internal helper used | key + voice profile | no app timeout/retry | text-only fallback | voice ownership, consent evidence, provider retention/deletion |
 | Browser Web Speech | microphone audio / spoken text may be processed by browser vendor | browser support and permission | browser-defined | unsupported control hidden | browser/vendor disclosure; offline is not guaranteed |
 | Vercel Functions logs | LINE user IDs, message IDs, subject IDs, role, failures | runtime logging | platform-defined | code intends not to log note/audio bodies | log retention, access control, identifier minimization |
@@ -488,10 +488,12 @@ time, retry policy, and observable typed failure.
 
 ### 6.1 Voice identity and consent
 
-Serin is a disclosed **granddaughter-style AI demo persona** and not the elder's actual family member
-or caregiver. Her Fish model is listed in `DEMO_VOICES` with a repository consent statement. The
-actual reminder register uses 「阿公」, so disclosure must occur in onboarding/demo UI and not rely
-only on source comments.
+The repository configures Serin as a **granddaughter-style AI demo persona**, not the elder's actual
+family member or caregiver. Her Fish model is listed in `DEMO_VOICES` with a repository consent
+statement. This fact is **not currently disclosed truthfully to the recipient**: LINE receives only
+framed text/audio, while the web preview says 「Serin 的聲音…（孫女語氣）」 without saying AI-generated
+or not-family. The reminder register uses 「阿公」, so disclosure must be implemented in onboarding
+and the demo UI rather than relying on source comments.
 
 Current limitations:
 
@@ -524,16 +526,17 @@ The correct guarantee is cache-address integrity, not semantic audio equivalence
 | INV-03 | A transport adapter does not compose clinical content | `Delivery.send` receives settled text | framing adds ungrounded movement advice; schedule uses fixture cupboard | validate full outbound text, including frame, against an allowed furniture contract |
 | INV-04 | Unknown medication is explicit; never guessed | `no_match`, `ambiguous`, `matched_without_ingredients` | ambiguity uses raw strings; permissive health-food contains matching | canonical resolution key; measured false-positive rate |
 | INV-05 | Narration cannot add clinical judgment beyond `Verdict` | narrator receives verdict; lexical validator | validator is not semantic; fallback violations are returned but narration is still rendered/sent | fallback violation becomes typed fail-closed result |
-| INV-06 | Caregiver observation remains their words | substring validator; batch append | classification/completeness unverified; elder question is misattributed | separate `Question`; provenance actor/role in summary |
-| INV-07 | OCR output has no privilege over typed input | review draft enters textarea | `rx` maps to `unknown`; no per-row confirm; intake only seeded | shared source parser + explicit confirm command + snapshot transaction |
+| INV-06 | Caregiver observation remains source-contained | whitespace-normalised containment; batch append | candidate whitespace may differ; partial accepted extraction can drop omitted/rejected sibling text; elder question is misattributed | store source paragraph + derived spans; coverage check; separate `Question` |
+| INV-07 | OCR output has no privilege over typed input | review draft enters textarea | model value/evidence can be jointly fabricated; `rx` maps to `unknown`; no per-row confirm; intake only seeded | human-confirmed command + shared source parser + snapshot transaction |
 | INV-08 | Reminder content comes from confirmed record | same rule/narration pipeline | runner uses `subject.cupboard`, not latest snapshot; slots not medication-specific | confirmed-regimen lookup at scheduler seam |
 | INV-09 | Reminder reaches the correct person exactly once at most | slot stamped before attempt | recipient resolved once from first listed schedule; Blob/dedupe are not cross-instance safe | transactional job/outbox keyed by subject/date/slot |
-| INV-10 | Elder receives no tappable links | LINE adapter validation | direct public health pages still exist; broadcast is unaddressed | authenticated web; addressed delivery only |
+| INV-10 | Elder LINE text contains no tappable link | `LineDelivery` rejects links for elder targets | no known adapter bypass; a QR is deliberately an image, not text | retain adapter and route tests |
 | INV-11 | Shared summary grant is short-lived and scoped | HMAC + expiry | token readable/non-revocable; direct path bypass; object remains after expiry | authorized mint, revocation/audit, retention job, remove bypass |
 | INV-12 | Voice use is opt-in and consented | key + profile; Serin catalogue | env ID may be unknown; consent is unverified text | verified catalogue only; disclose persona; withdrawal/deletion |
 | INV-13 | Duplicate LINE webhook does not duplicate effects | in-process `Set` | serverless instances do not share it; mark-before-handle can lose failed events | durable inbox with processing state |
 | INV-14 | No ungrounded behavior or health advice | clinical narration checks | `MOVEMENT_ASIDE` says 「有空的話起來走一走,不要坐太久」 and only suppresses `recurrent_falls` | remove it, or establish product/clinical rationale and validate full eligibility |
 | INV-15 | Bot does not solicit adherence/self-report | forbidden phrase check | `我的藥` greeting asks 「今天還好嗎？」; not adherence, but it opens an unsupported health conversation | decide if conversational question is desired and handle/avoid implied response expectation |
+| INV-16 | Health access and outbound delivery are authorized and addressed | LINE webhook HMAC/role checks and signed share paths protect only some surfaces | direct pages/routes are anonymous; demo broadcast sends to an audience rather than a resolved person | authenticate every endpoint; remove broadcast or isolate it to synthetic channel |
 
 ### 7.2 Critical current violations
 
@@ -598,7 +601,7 @@ scheduler is required; merely changing copy is not a fix.
 | `RoleBinding` | one JSON document per LINE user | registry chooses Blob/memory | in-process recent-write overlay only; cross-instance stale reads remain |
 | `SubjectSchedule` | one JSON document per subject | most callers choose Blob/memory; `/api/schedule` always Blob | in-process overlay; list/get may be stale across instances |
 | audio | private Blob keyed partly by text hash | Blob only | immutable-by-convention; no semantic content verification |
-| QR PNG | private Blob keyed by share token | Blob only | route expiry does not delete object |
+| QR PNG | private Blob keyed by share token | Blob only | proxy currently reads listed URL rather than pathname and may 404; expiry does not delete object |
 
 `globalThis` keeps the registry shared across bundles inside one process. It does not create shared
 state between Vercel instances.
@@ -650,7 +653,9 @@ policy before real patient data is allowed.
 | preferred narrator hangs | 8-second fallback | applies only to unused preferred narrator seam | provider-specific timeout budget |
 | fallback narration invalid | violations returned but text still used | unsafe fail-open | no send/render; incident signal |
 | Gemini fails | whole paragraph stored as `other` | structure lost, text preserved | expose fallback state to caregiver |
+| Gemini returns some valid and some rejected/omitted spans | accepted spans stored; source remainder not checked or retained | caregiver detail can be silently lost | persist source paragraph and require coverage/accounting |
 | Anthropic fails/hangs | 4xx/5xx on explicit failure; no timeout | request/cost can hang | timeout, cancel, quota, retry guidance |
+| Anthropic fabricates matching value + evidence | self-consistency check passes | false transcription appears plausible | mandatory human confirmation; investigate pixel-grounded evidence |
 | Fish fails | text-only | acceptable if text is safe | keep, with bounded timeout and telemetry |
 | LINE send fails/hangs | failure result when response arrives; no timeout | request may hang | bounded timeout; explicit retry policy |
 | inbound audio fetch fails | event already marked; log and drop; HTTP 200 | retry is lost | durable processing state; retryable fetch |
@@ -662,6 +667,7 @@ policy before real patient data is allowed.
 | OCR emits `rx` | parser stores source `unknown` | wrong summary grouping/count | single source parser / use `prescription` |
 | direct summary guessed | full latest log rendered | privacy disclosure | authenticated route or removal |
 | token screenshot leaks | holder can read until expiry | bearer grant; payload readable | minimize payload, audit, revocation if required |
+| LINE QR proxy reads Blob by URL | route may return 404 despite stored PNG | appointment handoff image is absent | read by pathname; route test + deployed fetch probe |
 | role reselect exposes caregiver material | target same-account role may gain caregiver view | elder/privacy model conflict | decide allowed disclosure before implementation |
 | movement aside is inappropriate | only fall-history suppresses | ungrounded health advice | remove or clinically govern eligibility |
 
@@ -686,14 +692,14 @@ Live LINE send and medication-bag photo tests are conditional and skip without e
 
 | Requirement | Current evidence | Missing acceptance evidence |
 | --- | --- | --- |
-| OBS-01 verbatim observation spans | `src/lib/observations/parse.test.ts` | route + Blob + summary E2E; elder-question separation |
-| OCR-01 visible-evidence transcription | `src/lib/ocr/validate.test.ts`, Claude adapter tests | authenticated route, timeout, real review audit |
+| OBS-01 source-contained observation spans | `src/lib/observations/parse.test.ts` | full-source preservation/coverage; route + Blob + summary E2E; elder-question separation |
+| OCR-01 model-response-bounded transcription draft | `src/lib/ocr/validate.test.ts`, Claude adapter tests | pixel provenance; authenticated route, timeout, real review audit |
 | OCR-02 review then snapshot | `BagCapture` + `/api/check` tests | `rx` regression test; intake persistence; per-row confirmation |
 | CLIN-01 deterministic grounding/rules | grounding, rule, verdict tests | false-positive benchmark at dataset scale |
 | NAR-01 narration constrained by verdict | narration tests | fallback fail-closed route/LINE tests; semantic limits |
 | LOG-01 longitudinal snapshot diff | log/diff tests | `BlobLogStore` contract and concurrent-write tests |
 | SUM-01 clinician one-page projection | summary pure-module use | direct-route auth, observation attribution, browser E2E |
-| SHARE-01 short-lived grant | token and QR path tests | bypass removal, revocation/retention, auth-to-mint |
+| SHARE-01 short-lived grant | token and QR pathname pure tests | LINE proxy route/pathname fix, deployed image fetch, bypass removal, revocation/retention, auth-to-mint |
 | LINE-01 signed normalized inbound | signature/adapter/inbound tests | multi-instance dedupe, queue/retry, provider timeout |
 | ROLE-01 role action enforcement | inbound role tests | same-account reselect policy and privacy acceptance |
 | SCH-01 slot validation | schedule pure tests | deployed cadence, Blob adapter, wrong-subject test |
@@ -724,22 +730,24 @@ layering more tests over each current shallow caller.
 1. **Close wrong-person and anonymous access paths.** Guard every endpoint, remove or authenticate
    direct summaries, restrict schedule records to the authorized subject, remove broadcast outside an
    isolated synthetic channel.
-2. **Make narration fail closed.** Invalid deterministic fallback must not be returned, rendered,
+2. **Repair the LINE QR handoff.** Read the private Blob by pathname, add a route test, then prove the
+   stored image URL is fetchable in the deployed environment before relying on it in a visit.
+3. **Make narration fail closed.** Invalid deterministic fallback must not be returned, rendered,
    synthesized or sent. Validate any post-narration frame separately.
-3. **Resolve the LINE identity decision.** Implement same-account role reselect only after deciding
+4. **Resolve the LINE identity decision.** Implement same-account role reselect only after deciding
    what caregiver-only information that account may see; keep subject immutable.
-4. **Deepen clinical check composition.** One interface owns source parsing, grounding, verdict,
+5. **Deepen clinical check composition.** One interface owns source parsing, grounding, verdict,
    narration outcome and optional snapshot persistence.
-5. **Complete OCR confirmation.** Use `prescription`, support correction, persist intake only when
+6. **Complete OCR confirmation.** Use `prescription`, support correction, persist intake only when
    copied and confirmed, and record reviewer/time without keeping the source image unnecessarily.
-6. **Replace reminder prototype mechanics.** Read latest confirmed regimen, resolve recipient per
+7. **Replace reminder prototype mechanics.** Read latest confirmed regimen, resolve recipient per
    subject, use durable minute-level scheduling/outbox, and make the schedule model explicit about
    whether it is generic or medication-specific.
-7. **Add provider resilience and governance.** AbortSignal, budgets, retry rules, redacted telemetry,
+8. **Add provider resilience and governance.** AbortSignal, budgets, retry rules, redacted telemetry,
    consent/retention/deletion for Gemini, Anthropic, Fish, LINE and Blob.
-8. **Move consistency-critical records behind a transactional adapter.** Migrate log, role, schedule,
+9. **Move consistency-critical records behind a transactional adapter.** Migrate log, role, schedule,
    job attempts and audit records with versioned writes.
-9. **Expand evidence.** Route security tests, Blob contract tests, browser E2E, deployed scheduler
+10. **Expand evidence.** Route security tests, Blob contract tests, browser E2E, deployed scheduler
    probe, grounding false-positive benchmark, and lint in `verify`.
 
 ---

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertNoSelfReport,
   frameMyMeds,
+  frameMyMedsWarm,
   frameReminder,
   greetingForHour,
   movementAsideFor,
@@ -220,5 +221,44 @@ describe("the movement aside", () => {
       conditions: ["recurrent_falls"],
     });
     expect(framed).not.toContain("走一走");
+  });
+});
+
+describe("a finding is announced, not recited", () => {
+  const NOW = new Date("2026-07-28T23:30:00Z");
+
+  it("does not read an English rule statement aloud to him", () => {
+    // The rule's `verbatim` is its English statement of why it fired, written
+    // for whoever audits the rule set. It reached him in English once.
+    const framed = frameMyMedsWarm({
+      items: [{ name: "紅麴膠囊" }],
+      warnings: ["This product's regulator-approved warning names liver disease."],
+      slotTimes: [],
+      now: NOW,
+    });
+    expect(framed).not.toContain("regulator-approved");
+    // He is told there is something to ask about instead.
+    expect(framed).toContain("藥師");
+  });
+
+  it("speaks a Chinese warning as it stands", () => {
+    const framed = frameMyMedsWarm({
+      items: [{ name: "紅麴膠囊" }],
+      warnings: ["患有嚴重疾病、感染症、肝病或經外科手術等情況者,請勿食用。"],
+      slotTimes: [],
+      now: NOW,
+    });
+    expect(framed).toContain("患有嚴重疾病、感染症、肝病或經外科手術等情況者,請勿食用。");
+  });
+
+  it("says nothing extra when there is no finding", () => {
+    const framed = frameMyMedsWarm({
+      items: [{ name: "紅麴膠囊" }],
+      warnings: [],
+      slotTimes: [],
+      now: NOW,
+    });
+    expect(framed).not.toContain("特別注意");
+    expect(framed).not.toContain("藥師");
   });
 });

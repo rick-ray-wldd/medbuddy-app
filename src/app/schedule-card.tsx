@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * 服藥提醒 — caregiver-configured schedule (spec §6.2's sanctioned outbound,
@@ -31,22 +31,25 @@ export function ScheduleCard({ subjectId }: { subjectId: string }) {
   const [state, setState] = useState<"loading" | "idle" | "busy">("loading");
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/schedule?subjectId=${subjectId}`);
-      const data = (await res.json()) as { schedule: { slots: Slot[] } | null };
-      setSlots(data.schedule?.slots ?? []);
-      setSaved(data.schedule?.slots ?? null);
-    } catch {
-      setSlots([]);
-    } finally {
-      setState("idle");
-    }
-  }, [subjectId]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/schedule?subjectId=${subjectId}`);
+        const data = (await res.json()) as { schedule: { slots: Slot[] } | null };
+        if (cancelled) return;
+        setSlots(data.schedule?.slots ?? []);
+        setSaved(data.schedule?.slots ?? null);
+      } catch {
+        if (!cancelled) setSlots([]);
+      } finally {
+        if (!cancelled) setState("idle");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId]);
 
   async function save() {
     setState("busy");

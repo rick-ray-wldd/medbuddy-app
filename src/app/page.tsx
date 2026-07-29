@@ -9,10 +9,9 @@ import CheckClient from "./check-client";
 
 export const dynamic = "force-dynamic";
 
-const LINK_LABELS: Record<ChannelLinkState, string> = {
+const LINK_LABELS: Partial<Record<ChannelLinkState, string>> = {
   linked: "已綁定",
   awaiting_role: "待在 LINE 選擇角色",
-  not_configured: "尚未設定帳號",
   mismatch: "角色配對異常",
   unavailable: "暫時無法讀取",
 };
@@ -47,7 +46,7 @@ function displayActivity(at: string | null): string {
  */
 export default async function Home() {
   const { registers, ruleSets, logStore, roleStore } = getRegistry();
-  const { pair, configurationError } = safeDemoPair();
+  const { pair } = safeDemoPair();
   const hub = await loadHubStatus(pair, roleStore, logStore);
 
   const stats = {
@@ -62,6 +61,8 @@ export default async function Home() {
     })),
   };
   const conditions = DEMO_SUBJECT.conditions.map((code) => CONDITION_LABELS[code]);
+  const elderLinkLabel = LINK_LABELS[hub.elder];
+  const caregiverLinkLabel = LINK_LABELS[hub.caregiver];
 
   return (
     <main className="medbuddy-shell">
@@ -78,9 +79,9 @@ export default async function Home() {
             把家中實際使用的藥品與照顧觀察，整理成長者看得懂、醫師用得上的資訊。
           </p>
         </div>
-        <div className="demo-badge" aria-label="示範環境：單一長者模式">
+        <div className="demo-badge" aria-label="示範環境">
           <span className="status-dot" aria-hidden="true" />
-          DEMO · 單一長者模式
+          DEMO
         </div>
       </header>
 
@@ -107,10 +108,12 @@ export default async function Home() {
               <div>
                 <strong>長者手機</strong>
                 <span>選「我是長輩」後，自動綁定父親</span>
-                <span className="link-state" data-state={configurationError ? "mismatch" : hub.elder}>
-                  <span className="link-state-dot" aria-hidden="true" />
-                  {configurationError ? "配對環境變數不完整" : LINK_LABELS[hub.elder]}
-                </span>
+                {elderLinkLabel && (
+                  <span className="link-state" data-state={hub.elder}>
+                    <span className="link-state-dot" aria-hidden="true" />
+                    {elderLinkLabel}
+                  </span>
+                )}
               </div>
             </div>
             <div className="phone-role">
@@ -118,14 +121,15 @@ export default async function Home() {
               <div>
                 <strong>照顧者手機</strong>
                 <span>選「我是照顧者」後，自動記錄照顧觀察</span>
-                <span className="link-state" data-state={configurationError ? "mismatch" : hub.caregiver}>
-                  <span className="link-state-dot" aria-hidden="true" />
-                  {configurationError ? "配對環境變數不完整" : LINK_LABELS[hub.caregiver]}
-                </span>
+                {caregiverLinkLabel && (
+                  <span className="link-state" data-state={hub.caregiver}>
+                    <span className="link-state-dot" aria-hidden="true" />
+                    {caregiverLinkLabel}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <p className="pairing-note">本次 Demo 固定 1 位長者 + 1 位照顧者，不提供切換對象。</p>
         </div>
       </section>
 
@@ -134,7 +138,7 @@ export default async function Home() {
           <div>
             <p className="eyebrow">SHARED CARE HUB</p>
             <h2 id="hub-heading">兩支 LINE 手機，共用一份照護紀錄</h2>
-            <p>照顧者輸入與長者詢問都固定落在父親的紀錄；網頁負責核對、追蹤與交接。</p>
+            <p>照顧者輸入與長者詢問會同步到共享照護紀錄；網頁負責核對、追蹤與交接。</p>
           </div>
           <form method="get" action="/">
             <button type="submit" className="hub-refresh">重新讀取狀態</button>

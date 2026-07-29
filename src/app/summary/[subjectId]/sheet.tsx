@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ObservationKind } from "@/lib/log/types";
 import { CONDITION_LABELS, type SeededSubject } from "@/lib/subjects";
 import { buildClinicianSummary, type ClinicianSummary } from "@/lib/summary/clinician";
 import type { SubjectLog } from "@/lib/log/types";
@@ -222,18 +223,83 @@ function Observations({ summary }: { summary: ClinicianSummary }) {
   if (summary.observations.length === 0) return null;
   return (
     <Section title="家屬觀察到的事">
-      <ul className="space-y-1 text-sm">
-        {summary.observations.map((o, i) => (
-          <li key={i}>
-            <span className="text-neutral-500">
-              {o.observedAt.slice(0, 10)} · {KIND_LABELS[o.kind] ?? o.kind}
-            </span>
-            <br />
-            {o.note}
-          </li>
-        ))}
-      </ul>
+      <ObservationTable observations={summary.observations} />
     </Section>
+  );
+}
+
+/**
+ * Ordered by what a prescriber acts on, not by when it was typed.
+ *
+ * A three-minute appointment is scanned, not read. Chronological order buries
+ * 「自己拿櫃子裡的止痛藥吃」 between two unremarkable notes, and that line is
+ * the one that changes a dose. Within a group the order is chronological,
+ * because a pattern over three weeks is itself information.
+ */
+const KIND_ORDER: ObservationKind[] = [
+  "self_medication",
+  "missed_dose",
+  "alcohol",
+  "symptom",
+  "other",
+];
+
+function ObservationTable({
+  observations,
+}: {
+  observations: ClinicianSummary["observations"];
+}) {
+  const grouped = KIND_ORDER.map((kind) => ({
+    kind,
+    rows: observations
+      .filter((o) => o.kind === kind)
+      .sort((a, b) => a.observedAt.localeCompare(b.observedAt)),
+  })).filter((g) => g.rows.length > 0);
+
+  if (grouped.length === 0) {
+    return <p className="text-sm text-neutral-500">這段期間家屬沒有記錄。</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-neutral-400 text-left">
+            <th className="py-1 pr-3 font-medium whitespace-nowrap">類別</th>
+            <th className="py-1 pr-3 font-medium whitespace-nowrap">日期</th>
+            <th className="py-1 font-medium">家屬原話</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grouped.map((group) =>
+            group.rows.map((o, i) => (
+              <tr
+                key={`${group.kind}-${i}`}
+                className="border-b border-neutral-200 align-top dark:border-neutral-800"
+              >
+                {/* The label spans its group so the eye lands on the category
+                    once rather than reading it down the page. */}
+                {i === 0 ? (
+                  <td
+                    rowSpan={group.rows.length}
+                    className="py-1 pr-3 font-medium whitespace-nowrap"
+                  >
+                    {KIND_LABELS[group.kind] ?? group.kind}
+                  </td>
+                ) : null}
+                <td className="py-1 pr-3 whitespace-nowrap text-neutral-500">
+                  {o.observedAt.slice(5, 10)}
+                </td>
+                {/* Verbatim. The specificity is the value: 「大概三四次」 is
+                    what the family said, and a tidier 「約每週三次」 would be
+                    the product's words on a sheet a prescriber acts from. */}
+                <td className="py-1">{o.note}</td>
+              </tr>
+            )),
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

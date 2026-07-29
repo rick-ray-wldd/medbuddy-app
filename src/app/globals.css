@@ -247,14 +247,9 @@ a {
   font-size: 0.9rem;
 }
 
-.phone-role div span,
-.pairing-note {
+.phone-role div span {
   color: var(--muted);
   font-size: 0.76rem;
-}
-
-.pairing-note {
-  margin-top: 10px;
 }
 
 .link-state {

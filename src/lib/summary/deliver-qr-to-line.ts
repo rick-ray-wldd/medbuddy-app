@@ -25,6 +25,8 @@ export type SummaryQrDeliveryResult =
       ok: true;
       deliveredAt: string;
       recipients: { elder: true; caregiver: boolean };
+      /** The URL LINE was given; fetchable with the same token the QR encodes. */
+      imageUrl: string;
     }
   | {
       ok: false;
@@ -188,6 +190,7 @@ export async function deliverSummaryQrToLine(
       ok: true,
       deliveredAt: new Date(now).toISOString(),
       recipients: { elder: true, caregiver: false },
+      imageUrl: stored.url,
     };
   }
 
@@ -245,5 +248,8 @@ export async function deliverSummaryQrToLine(
     ok: true,
     deliveredAt: new Date(now).toISOString(),
     recipients: { elder: true, caregiver: caregiverDelivered },
+    // Returned so a caller can check the image is fetchable. It is the same
+    // URL LINE was given, and carries the same token the QR already encodes.
+    imageUrl: stored.url,
   };
 }

@@ -453,7 +453,8 @@ describe("actions the two menus now carry", () => {
     }
   });
 
-  it("紀錄用藥 answers that bag OCR is not open yet", async () => {
+  it("紀錄用藥 points the caregiver at the camera page", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "https://medbuddy-app.vercel.app");
     const { delivery, calls } = fakeDelivery();
     const { setup } = fakeSetup();
     await store.put({
@@ -469,13 +470,21 @@ describe("actions the two menus now carry", () => {
       setup,
     });
 
-    // A press that produces nothing reads as the user's own mistake.
     expect(calls).toHaveLength(1);
-    expect(calls[0].message.text).toContain("還沒開放");
+    const text = calls[0].message.text;
+    // A link is allowed here and forbidden to the elder — §6.1 is about him.
+    expect(text).toContain("https://medbuddy-app.vercel.app/bag");
+    // The placeholder must never reach a person.
+    expect(text).not.toContain("{{BASE}}");
+    // States the limit rather than promising a clean read.
+    expect(text).toContain("留白");
   });
 
-  it("an elder may generate the summary QR himself", async () => {
-    // The caregiver may have forgotten and he is already in the room.
+
+  it("an elder may generate the summary QR directly through the injected server seam", async () => {
+    // The caregiver may have forgotten and he is already in the room. This
+    // must dispatch in-process: calling our own HTTP route couples LINE to a
+    // possibly stale NEXT_PUBLIC_BASE_URL and can cross Vercel projects.
     const { setup } = fakeSetup();
     await store.put({
       channelUserId: "U-father",
@@ -484,18 +493,52 @@ describe("actions the two menus now carry", () => {
       boundAt: AT,
     });
 
-    // Reaches the handler rather than being refused by the role whitelist;
-    // delivery itself needs network, so only the absence of a refusal is
-    // asserted here.
-    const errors: unknown[][] = [];
-    vi.mocked(console.error).mockImplementation((...args) => void errors.push(args));
+    const deliveredSubjects: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
 
     await handleInbound(msg({ kind: "postback", data: "action=summary" }, "U-father"), {
       roleStore: store,
       setup,
+      summaryQrDelivery: async (subjectId) => {
+        deliveredSubjects.push(subjectId);
+        return {
+          ok: true,
+          deliveredAt: AT,
+          recipients: { elder: true, caregiver: true },
+        };
+      },
     });
 
-    const refused = errors.some((e) => String(e[0]).includes("outside bound role"));
-    expect(refused).toBe(false);
+    expect(deliveredSubjects).toEqual(["subj-father"]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("a caregiver uses the same direct summary QR seam", async () => {
+    const { setup } = fakeSetup();
+    await store.put({
+      channelUserId: "U-daughter",
+      role: "caregiver",
+      subjectId: "subj-father",
+      boundAt: AT,
+    });
+
+    const deliveredSubjects: string[] = [];
+    await handleInbound(
+      msg({ kind: "postback", data: "action=summary" }, "U-daughter"),
+      {
+        roleStore: store,
+        setup,
+        summaryQrDelivery: async (subjectId) => {
+          deliveredSubjects.push(subjectId);
+          return {
+            ok: true,
+            deliveredAt: AT,
+            recipients: { elder: true, caregiver: true },
+          };
+        },
+      },
+    );
+
+    expect(deliveredSubjects).toEqual(["subj-father"]);
   });
 });

@@ -49,15 +49,23 @@ const FURNITURE: Record<string, string> = {
   no_family: "還沒有設定家人的帳號,所以沒有送出去。",
   pair_info:
     "本次示範使用兩支手機、固定兩個角色。\n\n這支手機是照顧者,另一支是長輩,兩邊都只連到父親的紀錄。",
-  // Bag OCR is specified (docs/MEDICATION-BAG-OCR-MIGRATION.md) and not built.
-  // The cell stays on the menu and says so, because a press that produces
-  // nothing reads to the person pressing it as their own mistake.
+  // The caregiver gets a link because §6.1's refusal is about the elder only.
+  // Photographing a bag needs a camera and a screen big enough to check eight
+  // columns against the paper in the other hand; a LINE bubble is neither.
   log_meds_prompt:
-    "拍藥袋這個功能還沒開放。\n\n目前請先在網頁上核對用藥,長輩那邊的「我的藥」就會跟著更新。",
+    "拍藥袋請用這個網頁,可以直接開相機或從相簿選:\n\n" +
+    "{{BASE}}/bag\n\n" +
+    "系統只會照抄藥袋上印出來的字。沒印的欄位會留白,不會自己補 —— " +
+    "讀完的每一列都要您核對過才會存進紀錄。",
 };
 
 export function furniture(key: keyof typeof FURNITURE | string): ActionReply {
-  return { text: FURNITURE[key] ?? "", fromPipeline: false };
+  const text = FURNITURE[key] ?? "";
+  // {{BASE}} rather than a hardcoded host: the same string has to work on a
+  // preview deployment, on localhost, and in production, and a link that
+  // silently points at the wrong deployment is worse than no link.
+  const base = process.env.NEXT_PUBLIC_BASE_URL?.trim().replace(/\/$/, "") ?? "";
+  return { text: text.replace(/\{\{BASE\}\}/g, base), fromPipeline: false };
 }
 
 /**

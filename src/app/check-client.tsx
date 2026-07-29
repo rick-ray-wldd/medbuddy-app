@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { BagCapture } from "./bag-capture";
 import Link from "next/link";
 import type { SeededSubject } from "@/lib/subjects";
 import type { Verdict } from "@/lib/verdict/types";
@@ -137,10 +138,17 @@ export default function CheckClient({ subject }: { subject: SeededSubject }) {
           <p id="medication-format-hint" className="mt-2 text-sm text-[var(--muted)]">
             範例：普拿疼膜衣錠500毫克 | otc
           </p>
+
+          {/* The bag is the other way this list gets filled. It appends to the
+              same textarea, in the same format, so what it reads walks the
+              identical grounding path as what was typed — and the caregiver
+              sees every line before pressing 核對. */}
+          <BagCapture
+            subjectId={subject.id}
+            disabled={busy}
+            onLines={(lines) => appendMedicationText(lines.join("\n"))}
+          />
           <div className="card-actions">
-            <Link href="/bag" className="secondary-action">
-              拍藥袋建立草稿
-            </Link>
             <fieldset disabled={busy} className="contents">
               <DictateButton
                 label="按住唸出品名"

@@ -53,6 +53,25 @@ const SYSTEM = `你的任務是**照抄**藥袋上印出來的文字,不是判�
 6. **不要**回傳病人姓名、身分證號、病歷號、地址、電話、生日。
    只要回報 patientIdentifyingTextDetected 是 true 還是 false。
 
+## 藥名要抄兩次
+
+台灣藥袋的「藥名」欄常常是**兩行**:第一行英文商品名,第二行中文品名。例如
+
+    藥  名: CATAFLAM 25MG SUGAR-COATED TABLETS
+            克他服寧25公絲糖衣錠
+
+也可能擠成一行:「(自費)TAMIFLU 75MG 克流感膠囊75MG」。
+
+- printedName:英文那一行,逐字照抄,包含 (自費) 之類的標記。
+- printedNameZh:**中文品名那一行**,連同含量一起抄 ——
+  「克他服寧25公絲糖衣錠」「克流感膠囊75MG」。
+  - 中文可能在英文的下一行、同一行的後面、或藥名欄附近。都要找。
+  - evidence 放實際看到中文的那一段,不必等於 printedName。
+  - 整列真的完全沒有中文品名才用 null。
+  - ⚠️ 不要抄「成份」「廠牌」「適應症」「警語」欄的中文 —— 那些不是品名。
+
+這不是翻譯。你**不可以**把 CATAFLAM 自己翻成中文,只能抄藥袋上印出來的字。
+
 ## 為什麼
 
 這份輸出會進入一個人的用藥紀錄。補一個看起來合理的值,比留白危險得多 ——
@@ -72,6 +91,7 @@ const TOOL = {
           properties: {
             rowIndex: { type: "integer" },
             printedName: { $ref: "#/$defs/field" },
+            printedNameZh: { $ref: "#/$defs/field" },
             strength: { $ref: "#/$defs/field" },
             dosePerAdministration: { $ref: "#/$defs/field" },
             frequency: { $ref: "#/$defs/field" },
@@ -83,6 +103,7 @@ const TOOL = {
           required: [
             "rowIndex",
             "printedName",
+            "printedNameZh",
             "strength",
             "dosePerAdministration",
             "frequency",

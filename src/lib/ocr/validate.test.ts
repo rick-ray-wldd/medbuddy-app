@@ -19,6 +19,7 @@ function extraction(
       {
         rowIndex: 0,
         printedName: field("普拿疼膜衣錠500毫克", "observed"),
+        printedNameZh: field("普拿疼膜衣錠500毫克", "observed"),
         strength: field("500毫克", "observed"),
         dosePerAdministration: field("1 顆", "observed"),
         frequency: field("每日三次", "observed"),
@@ -146,5 +147,40 @@ describe("review reasons name the row and the field", () => {
       extraction({ printedName: field("AMLODIPINE", "observed", "降血壓") }),
     );
     expect(reviewReasons.some((r) => r.includes("printedName"))).toBe(true);
+  });
+});
+
+describe("the Chinese name is checked against its own quote", () => {
+  it("keeps a Chinese name printed on the line below the English one", () => {
+    // Real bags print 藥名 over two lines. Requiring the Chinese name to sit
+    // inside printedName could never hold, and silently discarded every name
+    // the model read correctly.
+    const { rejections, rows } = validateExtraction(
+      extraction({
+        printedName: field("CATAFLAM 25MG SUGAR-COATED TABLETS", "observed"),
+        printedNameZh: field(
+          "克他服寧25公絲糖衣錠",
+          "observed",
+          "CATAFLAM 25MG SUGAR-COATED TABLETS 克他服寧25公絲糖衣錠",
+        ),
+      }),
+    );
+    expect(rejections).toEqual([]);
+    expect(rows[0].printedNameZh.value).toBe("克他服寧25公絲糖衣錠");
+  });
+
+  it("still rejects a Chinese name that is in no quote at all", () => {
+    // A translated or recalled name is the inference failure in other clothes,
+    // and the general evidence check catches it without any assumption about
+    // where on the bag the two names sit.
+    const { rejections, rows } = validateExtraction(
+      extraction({
+        printedName: field("CATAFLAM 25MG", "observed"),
+        printedNameZh: field("克他服寧25公絲糖衣錠", "observed", "CATAFLAM 25MG"),
+      }),
+    );
+    expect(rejections.some((r) => r.field === "printedNameZh")).toBe(true);
+    expect(rows[0].printedNameZh.value).toBeNull();
+    expect(rows[0].printedName.value).toBe("CATAFLAM 25MG");
   });
 });

@@ -42,7 +42,23 @@ export type ExtractedField = {
 export type ExtractedMedicationRow = {
   /** Row order as printed. Used to talk about a row, never as an identifier. */
   rowIndex: number;
+  /** The name cell, copied whole — including 「(自費)」 and any English. */
   printedName: ExtractedField;
+  /**
+   * The Chinese product name alone, with its strength, taken from inside
+   * `printedName`.
+   *
+   * Not a rewrite: a Taiwanese medication bag prints the English trade name,
+   * the Chinese name and the strength in one cell, and the TFDA register lists
+   * the Chinese name. 「TAMIFLU 75MG 克流感膠囊75MG」 resolves to nothing;
+   * 「克流感膠囊75MG」 resolves exactly. Both strings are on the bag — this
+   * field is which part of the cell to hand the resolver.
+   *
+   * The strength stays attached on purpose. 「克流感膠囊」 alone comes back
+   * ambiguous across several permits, and picking one would be the guess this
+   * whole module refuses to make.
+   */
+  printedNameZh: ExtractedField;
   strength: ExtractedField;
   dosePerAdministration: ExtractedField;
   frequency: ExtractedField;

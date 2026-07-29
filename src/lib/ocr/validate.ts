@@ -117,6 +117,26 @@ export function validateExtraction(
       };
     }
 
+    // printedNameZh is NOT checked against printedName, and that is a
+    // correction rather than an omission.
+    //
+    // The first version required it to be a substring of printedName, on the
+    // assumption that a bag prints both names in one cell. Real bags print
+    //
+    //     藥  名: CATAFLAM 25MG SUGAR-COATED TABLETS
+    //             克他服寧25公絲糖衣錠
+    //
+    // — two lines, and `printedName` is the first one. So the rule could never
+    // hold, and it silently discarded every Chinese name the model read
+    // correctly. Three bags in a row came back with the field blank while the
+    // logs showed it being rejected.
+    //
+    // The check that matters is the general one above: the value must appear
+    // in the evidence *it* cites. That already stops the failure worth
+    // stopping — a translated or recalled name has no quote containing it.
+    // Requiring it to also live inside a neighbouring field was a guess about
+    // layout dressed up as a safety rule.
+
     // A critical field that is missing or contested is stated as a reason, so
     // the caregiver is told which row to look at rather than being handed a
     // wall of text and a shrug.

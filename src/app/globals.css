@@ -907,3 +907,64 @@ a {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Medication-bag capture, inside the list card.
+   Bordered rather than boxed in another card: it fills the field above it, so
+   it should read as part of that field's controls and not as a second step. */
+.bag-capture {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+}
+
+.bag-draft {
+  margin-top: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-muted, rgba(0, 0, 0, 0.02));
+}
+
+.bag-draft-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.bag-draft-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.bag-draft-rows li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+/* A row whose name did not come off the bag. Marked, never hidden: the
+   caregiver has to know there is a line to type. */
+.bag-draft-unreadable {
+  color: var(--muted);
+}
+
+.bag-draft-detail {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.bag-draft-reasons {
+  margin: 0 0 0.5rem 1.1rem;
+  padding: 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.bag-draft-provenance {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}

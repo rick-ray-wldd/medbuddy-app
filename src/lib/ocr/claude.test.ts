@@ -40,6 +40,7 @@ const ONE_GOOD_ROW = {
     {
       rowIndex: 0,
       printedName: field("普拿疼膜衣錠500毫克"),
+      printedNameZh: field("普拿疼膜衣錠500毫克"),
       strength: field("500毫克"),
       dosePerAdministration: field("1 顆"),
       frequency: field("每日三次"),

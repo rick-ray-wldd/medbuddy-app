@@ -507,6 +507,7 @@ describe("actions the two menus now carry", () => {
           ok: true,
           deliveredAt: AT,
           recipients: { elder: true, caregiver: true },
+        imageUrl: "https://app.test/api/summary/qr/t.png",
         };
       },
     });
@@ -536,6 +537,7 @@ describe("actions the two menus now carry", () => {
             ok: true,
             deliveredAt: AT,
             recipients: { elder: true, caregiver: true },
+        imageUrl: "https://app.test/api/summary/qr/t.png",
           };
         },
       },

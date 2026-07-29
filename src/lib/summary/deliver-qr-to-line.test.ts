@@ -59,6 +59,7 @@ describe("clinician-summary QR delivery", () => {
     expect(result).toEqual({
       ok: true,
       deliveredAt: "2026-07-29T07:30:00.000Z",
+      imageUrl: expect.stringMatching(/\/api\/summary\/qr\/.+\.png$/),
       recipients: { elder: true, caregiver: true },
     });
     expect(renderedUrls).toHaveLength(1);
@@ -293,6 +294,7 @@ describe("clinician-summary QR delivery", () => {
     expect(result).toEqual({
       ok: true,
       deliveredAt: "2026-07-29T07:30:00.000Z",
+      imageUrl: expect.stringMatching(/\/api\/summary\/qr\/.+\.png$/),
       recipients: { elder: true, caregiver: false },
     });
     expect(targets.map(({ channelUserId, role }) => ({ channelUserId, role }))).toEqual([

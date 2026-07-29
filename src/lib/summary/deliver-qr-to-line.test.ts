@@ -75,12 +75,24 @@ describe("clinician-summary QR delivery", () => {
     expect(sent).toHaveLength(2);
     expect(sent[0]).toMatchObject({
       target: { channelUserId: "U-father", role: "elder" },
-      message: { imageUrl: "https://blob.example.com/summary.png" },
+      // The route, not the blob: the store is private, so LINE is sent a
+      // URL that verifies the token before reading.
+      message: {
+        imageUrl: expect.stringMatching(
+          /^https:\/\/current-medbuddy\.vercel\.app\/api\/summary\/qr\/.+\.png$/,
+        ),
+      },
     });
     expect(sent[0].message.text).not.toMatch(/https?:\/\//);
     expect(sent[1]).toMatchObject({
       target: { channelUserId: "U-daughter", role: "caregiver" },
-      message: { imageUrl: "https://blob.example.com/summary.png" },
+      // The route, not the blob: the store is private, so LINE is sent a
+      // URL that verifies the token before reading.
+      message: {
+        imageUrl: expect.stringMatching(
+          /^https:\/\/current-medbuddy\.vercel\.app\/api\/summary\/qr\/.+\.png$/,
+        ),
+      },
     });
     expect(sent[1].message.text).toContain(renderedUrls[0]);
   });
@@ -346,5 +358,55 @@ describe("who the QR is addressed to", () => {
     expect(sent.map((s) => s.to)).toEqual(["U-father-phone", "U-daughter-phone"]);
     // He gets it as the elder — which is what forbids a link in his copy.
     expect(sent[0].role).toBe("elder");
+  });
+});
+
+describe("where the QR image lives", () => {
+  it("is served from our own route, not a public blob", async () => {
+    // The store is configured private-only and refused `access: "public"`,
+    // which is the right configuration for a store holding medication logs.
+    // A public blob would also be reachable by anyone who guesses the path,
+    // forever; the route checks the token's signature and expiry first.
+    vi.stubEnv("SUMMARY_SHARE_SECRET", "test-secret");
+    const stored: string[] = [];
+    let imageUrl = "";
+
+    await deliverSummaryQrToLine(
+      { subjectId: "subj-father", baseUrl: "https://app.test" },
+      {
+        now: () => NOW,
+        renderQr: async () => Uint8Array.from([1]),
+        storeQr: async (path) => {
+          stored.push(path);
+          return { url: "https://blob.test/should-not-be-used.png" };
+        },
+        delivery: {
+          async send(_t, message) {
+            imageUrl = message.imageUrl ?? "";
+            return { ok: true as const };
+          },
+        },
+        roleStore: {
+          async get() {
+            return null;
+          },
+          async put() {},
+          async findByRole() {
+            return {
+              channelUserId: "U-father",
+              role: "elder" as const,
+              subjectId: "subj-father",
+              boundAt: "2026-07-29T00:00:00.000Z",
+            };
+          },
+        },
+      },
+    );
+
+    // Written to Blob under the token's path…
+    expect(stored[0]).toContain("summary-qr");
+    // …but LINE is sent our route, which is what makes the private store fine.
+    expect(imageUrl).toMatch(/^https:\/\/app\.test\/api\/summary\/qr\/.+\.png$/);
+    expect(imageUrl).not.toContain("blob.test");
   });
 });

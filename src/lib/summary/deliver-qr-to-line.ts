@@ -63,8 +63,11 @@ async function storeQr(path: string, png: Uint8Array): Promise<{ url: string }> 
   const { put } = await import("@vercel/blob");
   return await put(path, png as unknown as Blob, {
     // LINE must fetch the image. The image carries only the short-lived,
-    // signed token already visible in the QR, not clinical content itself.
-    access: "public",
+    // Private: the store is configured private-only, and a public blob would
+    // be reachable by anyone who guesses the path, forever. The public
+    // surface is /api/summary/qr/[token], which verifies the signature and
+    // the expiry before reading — the same grant scanning the QR already is.
+    access: "private",
     addRandomSuffix: false,
     // The signed token is deterministic for one subject at one millisecond,
     // so a retry may legitimately address this exact pathname again. The QR
@@ -137,7 +140,12 @@ export async function deliverSummaryQrToLine(
     token,
   );
   const png = await (deps.renderQr ?? renderQr)(url);
-  const stored = await (deps.storeQr ?? storeQr)(summaryQrPath(token), png);
+  await (deps.storeQr ?? storeQr)(summaryQrPath(token), png);
+  // LINE fetches this to render the image, so it must be public and it must
+  // end in a recognised extension.
+  const stored = {
+    url: `${request.baseUrl.trim().replace(/\/$/, "")}/api/summary/qr/${token}.png`,
+  };
   const delivery = deps.delivery ?? lineDelivery();
 
   // ── demo escape hatch ────────────────────────────────────────────────────

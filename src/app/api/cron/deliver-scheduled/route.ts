@@ -12,6 +12,9 @@ import { runScheduledDeliveries } from "@/lib/schedule/run";
  * 401, no body, nothing read. All real logic is in lib/schedule/run.ts,
  * tested offline.
  */
+// A tick may deliver several slots, each with synthesis + hosting.
+export const maxDuration = 60;
+
 export async function GET(req: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {

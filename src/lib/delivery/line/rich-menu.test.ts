@@ -50,11 +50,13 @@ describe("the elder's menu", () => {
 describe("the caregiver's menu", () => {
   const menu = caregiverRichMenu();
 
-  it("gives four targets and tiles the menu", () => {
-    // Was 2×3. 他問了什麼, 照顧對象 and 開啟網頁 came off: a subject switcher
-    // over a roster of one is a control with nothing to control, and cells
-    // kept on "might be useful" take size from the ones that are.
-    expect(menu.areas).toHaveLength(4);
+  it("gives six targets and tiles the menu", () => {
+    // Went 2×3 → 2×2 when dead cells came off (a control with nothing to
+    // control takes size from the ones that work), then back to 3×2 on
+    // 2026-07-29 when two IMPLEMENTED features arrived: in-LINE reminder
+    // scheduling and the caregiver-initiated send (§6.2). Every cell here is
+    // a working feature — the rule was never "four", it was "no dead cells".
+    expect(menu.areas).toHaveLength(6);
     const covered = menu.areas.reduce((sum, a) => sum + a.bounds.width * a.bounds.height, 0);
     expect(covered).toBe(2500 * 1686);
   });
@@ -63,11 +65,13 @@ describe("the caregiver's menu", () => {
     expect(menu.areas.every((a) => a.action.type === "postback")).toBe(true);
   });
 
-  it("offers exactly the four features the demo implements", () => {
+  it("offers exactly the six features the demo implements", () => {
     expect(CAREGIVER_CELLS.map((c) => c.label)).toEqual([
       "記一件事",
-      "產生回診單",
       "紀錄用藥",
+      "產生回診單",
+      "服藥提醒",
+      "傳說明",
       "切換身分",
     ]);
   });

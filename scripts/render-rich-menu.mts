@@ -168,4 +168,4 @@ async function render(cells: Cell[], cols: number, rows: number, out: string) {
 
 const root = process.cwd();
 await render(ELDER_CELLS, 2, 2, path.join(root, "public", "rich-menu-elder.png"));
-await render(CAREGIVER_CELLS, 2, 2, path.join(root, "public", "rich-menu-caregiver.png"));
+await render(CAREGIVER_CELLS, 3, 2, path.join(root, "public", "rich-menu-caregiver.png"));

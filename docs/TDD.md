@@ -565,3 +565,133 @@ arrive is recoverable. A wrong one is not.
    before/after-meal answers be implemented without inventing a schedule.
 5. **Encode more licensed criteria and measure false-positive rate at scale.**
    Permissive matching without that number is a claim rather than a design.
+
+---
+
+## 12. Menu actions — the map from a tap to a guarantee
+
+Each LINE menu cell is a `postback` carrying `action=…`. This section is the
+whole path for each, and the file that enforces the rule it depends on.
+
+### 12.1 Routing, and where authorisation actually happens
+
+```
+LINE postback
+  → line/webhook.ts          transport: signature over raw bytes, dedupe by
+                             webhookEventId. Decides nothing.
+  → inbound.ts
+       ├ parseRoleFromPostback   postback data is CLIENT INPUT
+       ├ roleStore.get()         who this phone is, per the card he answered
+       ├ bindingMatchesDemo()    the pair gate
+       └ ROLE_ACTIONS[role]      ← the authorisation boundary
+  → menu-actions.ts / schedule / summary
+```
+
+> **A rich menu hides the other role's buttons. It is not an authorisation
+> boundary.** LINE signs the webhook envelope, not the intent inside it, so
+> `action=note` from a phone bound as `elder` is a string anybody can send.
+> `ROLE_ACTIONS` is the check. Verified by
+> `src/lib/delivery/__tests__/inbound-roles.test.ts`.
+
+`summary` appears in both sets deliberately: he generates the same QR the
+caregiver does, because she may have forgotten and he is already in the room.
+`rebind` is handled *before* the check — it exposes nothing, and it has to stay
+reachable from a menu that may itself be the wrong one.
+
+### 12.2 Per-action table
+
+| action | Role | Reads | Writes | The guarantee, and where |
+| --- | --- | --- | --- | --- |
+| `my_meds` | elder | latest `RegimenSnapshot` + `SubjectSchedule` | — | Re-narrated per role, never a stored sentence. `narrate(verdict, "elder", …)` cannot query the registers — `narration/narrate.ts` |
+| `schedule` | elder | `SubjectSchedule` | — | Empty schedule → says so. Never assembles a plausible one — `menu-actions.ts` |
+| `summary` | both | log + verdict | QR blob | HMAC + 8h TTL; image to him, image+link to her — `summary/share-token.ts`, `summary/deliver-qr-to-line.ts` |
+| `note` | caregiver | — | `Observation[]` | Every note verbatim in the caregiver's input or discarded — `observations/parse.ts` |
+| `log_meds` | caregiver | — | (draft only) | OCR output has no privilege; it re-enters through grounding — `ocr/validate.ts` |
+| `reminders` | caregiver | `SubjectSchedule` | `SubjectSchedule` | ≤4 slots, ≥60 min apart, no quiet hours — `schedule/types.ts`, `schedule/due.ts` |
+| `send_explanation` | caregiver | verdict | — | Server re-runs the pipeline; the client cannot supply text — `delivery/deliver-explanation.ts` |
+| `rebind` | both | — | `RoleBinding` | Elder→caregiver refused unless flagged — `roles/bind.ts` |
+
+### 12.3 The one invariant every outbound path shares
+
+```
+                    ┌──────────────────┐
+  bag OCR ────────► │                  │
+  typed text ─────► │  grounding →     │
+  elder question ─► │  rules → verdict │
+                    └────────┬─────────┘
+                             │  the verdict, and nothing else
+                             ▼
+                      narrate(verdict, role)
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+           我的藥         服藥提醒        傳說明
+        (he asked)     (scheduled)     (she pushed)
+```
+
+They differ in **when** they speak. They cannot differ in **what they may
+say**, because they receive the same object and narration holds no register
+access to add to it.
+
+Reminder framing (`delivery/reminder-framing.ts`) wraps that output in a
+greeting and a sign-off. It never sees a medicine name — it writes the frame,
+not the picture — which is the reason a casual register is safe there and
+would not be safe one layer down.
+
+### 12.4 Speech: keyed by the text it speaks
+
+```
+text ──► sha256[0..24] ──► line-audio/pre-{hash}-{ms}.mp3
+                              │ hit  → attach
+                              │ miss → Fish synthesise → store → attach
+                              │ fail → send text only
+```
+
+The hash is the guarantee: **a clip can only ever say the sentence that
+produced it.** That is what makes synthesise-on-miss safe — it was never
+"somebody listened to this clip", it was "the key IS the text". Change a word
+in the narrator and every clip silently stops matching, which is the correct
+failure.
+
+Audio hosting is a private blob behind an HMAC-signed route
+(`api/line/audio/[key]`). A hosting failure degrades to text rather than
+failing the send: the explanation is correct as text and was produced by the
+rules either way, and an older adult who presses a button and sees nothing
+reads it as his own mistake.
+
+### 12.5 Storage, and the consistency limit that shaped four bugs
+
+| Record | Store | Why it is here, and what it costs |
+| --- | --- | --- |
+| `RoleBinding` | Blob, one doc per user | Per-user keys make two phones being set up in the same minute collision-free |
+| `SubjectLog` | Blob, one doc per subject | Read-modify-write over the whole document |
+| `SubjectSchedule` | Blob, one doc per subject | Same |
+| QR image | Blob, private | Served through a token-checking route |
+
+> **Vercel Blob does not give read-your-writes.** Four separate failures traced
+> to a decision made on a read that could be stale:
+> a rebind that escaped the terminal rule; four observations stored as one; a
+> demo log that restored the noise it had just had removed; and a summary
+> addressed from an environment variable that had stopped being the source.
+>
+> Mitigated three ways — an in-process overlay (`roles/stores.ts`), batched
+> writes (`LogStore.appendObservations`), and stating a desired state rather
+> than deriving it (`scripts/seed-demo-observations.mts`). **None of these is a
+> fix.** The record belongs in Postgres, and `RoleStore` / `LogStore` exist as
+> interfaces precisely so that is one file each.
+
+### 12.6 Evidence
+
+| Claim | How to check |
+| --- | --- |
+| Narration cannot introduce a drug | `src/lib/narration/narrate.test.ts` — narrate receives a verdict, no registers |
+| A caregiver's words are never rewritten | `src/lib/observations/parse.test.ts` — "a tidied-up rewrite of something that was said" |
+| OCR cannot infer a name from an indication | `src/lib/ocr/validate.test.ts` — "rejects a drug name inferred from the indication" |
+| 5mg and 50mg never fold together | same file — "still rejects 5mg quoted from a bag that reads 50mg" |
+| An elder is never sent a link | `src/lib/delivery/line/rich-menu.test.ts` — `assertNoLinksForElder` |
+| A reminder never asks or grades him | `src/lib/delivery/reminder-framing.test.ts` — `assertNoSelfReport` |
+| A menu is not an authorisation boundary | `src/lib/delivery/__tests__/inbound-roles.test.ts` — refused action outside bound role |
+| Severity can only ever escalate to a human | `src/lib/rules/engine.ts` — `assertRuleSetIsSafe` throws on anything else |
+
+`npm run verify` runs typecheck, 316 tests and a production build. Verified from
+a clean clone with every API key unset: no test depends on a secret.

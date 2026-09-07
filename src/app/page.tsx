@@ -6,6 +6,7 @@ import {
 } from "@/lib/delivery/line/demo-pair";
 import { loadHubStatus, type ChannelLinkState } from "@/lib/hub/status";
 import CheckClient from "./check-client";
+import LineInvite from "./line-invite";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,7 @@ export default async function Home() {
         </div>
 
         <div className="pairing-panel" aria-label="LINE 雙手機示範配對">
+          <LineInvite />
           <p className="eyebrow">LINE 示範配對</p>
           <div className="phone-pair">
             <div className="phone-role">

@@ -209,6 +209,69 @@ a {
   padding-left: 28px;
 }
 
+.line-invite {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.line-invite-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.line-invite-qr {
+  width: 116px;
+  height: 116px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 6px;
+}
+
+.line-invite-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.line-invite-copy strong {
+  font-size: 0.95rem;
+}
+
+.line-invite-copy > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.line-invite-link {
+  width: fit-content;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #06c755;
+  padding: 7px 15px;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.line-invite-link:hover {
+  background: #05a948;
+}
+
+.line-invite-id {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .phone-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -859,6 +922,11 @@ a {
   .coverage-grid,
   .hub-flow {
     grid-template-columns: 1fr;
+  }
+
+  .line-invite-body {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .hub-arrow {

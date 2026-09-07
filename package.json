@@ -42,10 +42,11 @@
     "adm-zip": "^0.6.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "jsqr": "^1.4.0",
+    "sharp": "^0.34.4",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10",
-    "sharp": "^0.34.4"
+    "vitest": "^4.1.10"
   },
   "type": "module"
 }
